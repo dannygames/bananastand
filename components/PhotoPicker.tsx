@@ -12,6 +12,7 @@ interface PhotoPickerProps {
 
 export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
 
@@ -97,6 +98,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   };
 
   const handleEditPhoto = () => {
+    if (isEditing) return; // Prevent multiple simultaneous edits
+
     Alert.prompt(
       'Edit Photo',
       'Describe the edit you want to make to this photo:',
@@ -107,10 +110,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         },
         {
           text: 'Apply Edit',
-          onPress: (editDescription) => {
-            if (editDescription && editDescription.trim()) {
-              console.log('Edit description:', editDescription);
-              Alert.alert('Edit Requested', `Your edit request: "${editDescription}" has been submitted.`);
+          onPress: async (editDescription) => {
+            if (editDescription && editDescription.trim() && selectedImage) {
+              await processImageEdit(editDescription.trim());
             } else {
               Alert.alert('No Description', 'Please provide a description for the edit.');
             }
@@ -121,6 +123,102 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       '',
       'default'
     );
+  };
+
+  const processImageEdit = async (prompt: string) => {
+    if (!selectedImage) return;
+
+    setIsEditing(true);
+    
+    try {
+      console.log('🎨 Starting image edit with prompt:', prompt);
+      console.log('📂 Image URI:', selectedImage.substring(0, 100) + '...');
+      
+      let imageBlob: Blob;
+      
+      if (selectedImage.startsWith('data:')) {
+        // Handle base64 data URI
+        console.log('📄 Converting base64 data URI to blob...');
+        const response = await fetch(selectedImage);
+        imageBlob = await response.blob();
+      } else {
+        // Handle file URI (from camera/gallery)
+        console.log('📁 Fetching image from URI...');
+        const response = await fetch(selectedImage);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch image: ${response.status}`);
+        }
+        imageBlob = await response.blob();
+      }
+      
+      console.log('📦 Image blob size:', imageBlob.size, 'bytes, type:', imageBlob.type);
+      
+      if (imageBlob.size === 0) {
+        throw new Error('Image file is empty or could not be loaded');
+      }
+      
+      // Create FormData for the API request
+      const formData = new FormData();
+      formData.append('prompt', prompt);
+      
+      // For React Native, we need to create a proper file-like object
+      const imageFile = {
+        uri: selectedImage,
+        type: imageBlob.type || 'image/jpeg',
+        name: 'image.jpg',
+      };
+      
+      formData.append('image', imageFile as any);
+
+      console.log('📡 Sending request to API...');
+
+      // Call your API with explicit headers
+      const apiResponse = await fetch('http://localhost:3000/api/edit-image-gemini', {
+        method: 'POST',
+        body: formData,
+        // Don't set Content-Type header - let the browser set it with boundary
+      });
+
+      console.log('📡 API Response status:', apiResponse.status);
+
+      if (!apiResponse.ok) {
+        const errorText = await apiResponse.text();
+        console.error('❌ API Error:', errorText);
+        throw new Error(`API Error (${apiResponse.status}): ${errorText}`);
+      }
+
+      const result = await apiResponse.json();
+
+      if (result.success && result.editedImageData) {
+        // Convert base64 to data URI
+        const editedImageUri = `data:image/jpeg;base64,${result.editedImageData}`;
+        
+        // Update the selected image with the edited version
+        setSelectedImage(editedImageUri);
+        onImageSelected?.(editedImageUri);
+        
+        Alert.alert(
+          'Edit Complete! ✨',
+          'Your image has been successfully edited by AI.',
+          [{ text: 'Great!', style: 'default' }]
+        );
+        
+        console.log('✅ Image edit completed successfully');
+      } else {
+        throw new Error(result.error || result.details || 'Failed to edit image');
+      }
+      
+    } catch (error) {
+      console.error('❌ Image edit failed:', error);
+      
+      Alert.alert(
+        'Edit Failed',
+        `Sorry, we couldn't edit your image. ${error instanceof Error ? error.message : 'Please try again.'}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setIsEditing(false);
+    }
   };
 
   const handleMakeVideo = () => {
@@ -141,29 +239,42 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       {selectedImage && (
         <View style={styles.imageContainer}>
           <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
-          <View style={styles.actionButtonsContainer}>
+          
+          {/* Primary Action Buttons */}
+          <View style={styles.primaryButtonsContainer}>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: tintColor }]}
+              style={[
+                styles.primaryButton, 
+                styles.editButton, 
+                { backgroundColor: isEditing ? '#999' : tintColor }
+              ]}
               onPress={handleEditPhoto}
+              disabled={isEditing}
             >
-              <ThemedText style={styles.actionButtonText}>Edit</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>
+                {isEditing ? '🔄 Editing...' : '✏️ Edit Photo'}
+              </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.actionButton, { backgroundColor: tintColor }]}
+              style={[styles.primaryButton, styles.videoButton, { backgroundColor: '#007AFF' }]}
               onPress={handleMakeVideo}
             >
-              <ThemedText style={styles.actionButtonText}>Make Video</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>🎬 Make Video</ThemedText>
             </TouchableOpacity>
           </View>
-          <TouchableOpacity
-            style={[styles.removeButton, { backgroundColor: '#ff4444' }]}
-            onPress={() => {
-              setSelectedImage(null);
-              onImageSelected?.('');
-            }}
-          >
-            <ThemedText style={styles.removeButtonText}>Remove</ThemedText>
-          </TouchableOpacity>
+
+          {/* Secondary Action */}
+          <View style={styles.secondaryButtonContainer}>
+            <TouchableOpacity
+              style={styles.removeButton}
+              onPress={() => {
+                setSelectedImage(null);
+                onImageSelected?.('');
+              }}
+            >
+              <ThemedText style={styles.removeButtonText}>🗑️ Remove Photo</ThemedText>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
     </ThemedView>
@@ -177,10 +288,15 @@ const styles = StyleSheet.create({
   },
   button: {
     borderWidth: 2,
-    borderRadius: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    marginBottom: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   buttonText: {
     fontSize: 16,
@@ -188,7 +304,7 @@ const styles = StyleSheet.create({
   },
   imageContainer: {
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 20,
     width: '100%',
     marginLeft: -32,
     marginRight: -32,
@@ -196,35 +312,54 @@ const styles = StyleSheet.create({
   selectedImage: {
     width: Dimensions.get('window').width,
     height: 300,
-    marginBottom: 16,
+    marginBottom: 24,
   },
-  actionButtonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 16,
-    marginBottom: 16,
+  primaryButtonsContainer: {
+    flexDirection: 'column',
+    alignItems: 'stretch',
     paddingHorizontal: 32,
+    marginBottom: 20,
+    gap: 12,
   },
-  actionButton: {
-    paddingVertical: 12,
+  primaryButton: {
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 8,
-    minWidth: 100,
+    borderRadius: 12,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
-  actionButtonText: {
+  editButton: {
+    // Additional styling for edit button if needed
+  },
+  videoButton: {
+    // Additional styling for video button if needed
+  },
+  primaryButtonText: {
     color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 17,
+    fontWeight: '700',
     textAlign: 'center',
+    letterSpacing: 0.5,
+  },
+  secondaryButtonContainer: {
+    paddingHorizontal: 32,
+    marginTop: 8,
   },
   removeButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 6,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#ff4444',
   },
   removeButtonText: {
-    color: 'white',
-    fontSize: 14,
+    color: '#ff4444',
+    fontSize: 15,
     fontWeight: '600',
+    textAlign: 'center',
   },
 });
