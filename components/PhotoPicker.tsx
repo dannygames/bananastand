@@ -1,20 +1,42 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useState } from 'react';
-import { Alert, Dimensions, StyleSheet, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
+
+interface ImageVersion {
+  uri: string;
+  prompt?: string;
+  timestamp: Date;
+  isOriginal?: boolean;
+}
 
 interface PhotoPickerProps {
   onImageSelected?: (uri: string) => void;
 }
 
 export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
+  const scrollViewRef = useRef<ScrollView>(null);
+
+  const currentImage = imageVersions.length > 0 ? imageVersions[currentImageIndex] : null;
+
+  // Effect to scroll to the current image when index changes
+  useEffect(() => {
+    if (scrollViewRef.current && imageVersions.length > 0) {
+      const screenWidth = Dimensions.get('window').width;
+      scrollViewRef.current.scrollTo({
+        x: currentImageIndex * screenWidth,
+        animated: true,
+      });
+    }
+  }, [currentImageIndex]);
 
   const requestPermissions = async () => {
     const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
@@ -65,7 +87,13 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        setSelectedImage(imageUri);
+        const newVersion: ImageVersion = {
+          uri: imageUri,
+          timestamp: new Date(),
+          isOriginal: true
+        };
+        setImageVersions([newVersion]);
+        setCurrentImageIndex(0);
         onImageSelected?.(imageUri);
       }
     } catch (error) {
@@ -88,7 +116,13 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
       if (!result.canceled && result.assets[0]) {
         const imageUri = result.assets[0].uri;
-        setSelectedImage(imageUri);
+        const newVersion: ImageVersion = {
+          uri: imageUri,
+          timestamp: new Date(),
+          isOriginal: true
+        };
+        setImageVersions([newVersion]);
+        setCurrentImageIndex(0);
         onImageSelected?.(imageUri);
       }
     } catch (error) {
@@ -111,7 +145,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         {
           text: 'Apply Edit',
           onPress: async (editDescription) => {
-            if (editDescription && editDescription.trim() && selectedImage) {
+            if (editDescription && editDescription.trim() && currentImage) {
               await processImageEdit(editDescription.trim());
             } else {
               Alert.alert('No Description', 'Please provide a description for the edit.');
@@ -126,25 +160,25 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   };
 
   const processImageEdit = async (prompt: string) => {
-    if (!selectedImage) return;
+    if (!currentImage) return;
 
     setIsEditing(true);
     
     try {
       console.log('🎨 Starting image edit with prompt:', prompt);
-      console.log('📂 Image URI:', selectedImage.substring(0, 100) + '...');
+      console.log('📂 Image URI:', currentImage.uri.substring(0, 100) + '...');
       
       let imageBlob: Blob;
       
-      if (selectedImage.startsWith('data:')) {
+      if (currentImage.uri.startsWith('data:')) {
         // Handle base64 data URI
         console.log('📄 Converting base64 data URI to blob...');
-        const response = await fetch(selectedImage);
+        const response = await fetch(currentImage.uri);
         imageBlob = await response.blob();
       } else {
         // Handle file URI (from camera/gallery)
         console.log('📁 Fetching image from URI...');
-        const response = await fetch(selectedImage);
+        const response = await fetch(currentImage.uri);
         if (!response.ok) {
           throw new Error(`Failed to fetch image: ${response.status}`);
         }
@@ -163,7 +197,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       
       // For React Native, we need to create a proper file-like object
       const imageFile = {
-        uri: selectedImage,
+        uri: currentImage.uri,
         type: imageBlob.type || 'image/jpeg',
         name: 'image.jpg',
       };
@@ -193,15 +227,20 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         // Convert base64 to data URI
         const editedImageUri = `data:image/jpeg;base64,${result.editedImageData}`;
         
-        // Update the selected image with the edited version
-        setSelectedImage(editedImageUri);
-        onImageSelected?.(editedImageUri);
+        // Add the new edited version to the carousel
+        const newVersion: ImageVersion = {
+          uri: editedImageUri,
+          prompt: prompt,
+          timestamp: new Date(),
+          isOriginal: false
+        };
         
-        Alert.alert(
-          'Edit Complete! ✨',
-          'Your image has been successfully edited by AI.',
-          [{ text: 'Great!', style: 'default' }]
-        );
+        setImageVersions(prev => {
+          const newVersions = [...prev, newVersion];
+          setCurrentImageIndex(newVersions.length - 1); // Move to the new image (last index)
+          return newVersions;
+        });
+        onImageSelected?.(editedImageUri);
         
         console.log('✅ Image edit completed successfully');
       } else {
@@ -232,13 +271,60 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         onPress={showImagePickerOptions}
       >
         <ThemedText style={[styles.buttonText, { color: tintColor }]}>
-          {selectedImage ? 'Change Photo' : 'Select Photo'}
+          {imageVersions.length > 0 ? 'Change Photo' : 'Select Photo'}
         </ThemedText>
       </TouchableOpacity>
 
-      {selectedImage && (
+      {imageVersions.length > 0 && (
         <View style={styles.imageContainer}>
-          <Image source={{ uri: selectedImage }} style={styles.selectedImage} />
+          {/* Image Carousel */}
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            style={styles.carouselContainer}
+            onMomentumScrollEnd={(event) => {
+              const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+              if (newIndex !== currentImageIndex) {
+                setCurrentImageIndex(newIndex);
+              }
+            }}
+          >
+            {imageVersions.map((version, index) => (
+              <View key={index} style={styles.imageSlide}>
+                <Image source={{ uri: version.uri }} style={styles.selectedImage} />
+                <View style={styles.imageInfo}>
+                  <ThemedText style={styles.imageInfoText}>
+                    {version.isOriginal ? '📷 Original' : `✏️ ${version.prompt}`}
+                  </ThemedText>
+                  <ThemedText style={styles.imageTimestamp}>
+                    {version.timestamp.toLocaleTimeString()}
+                  </ThemedText>
+                </View>
+              </View>
+            ))}
+          </ScrollView>
+
+          {/* Carousel Indicators */}
+          {imageVersions.length > 1 && (
+            <View style={styles.indicatorContainer}>
+              {imageVersions.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.indicator,
+                    {
+                      backgroundColor: index === currentImageIndex ? tintColor : '#ccc',
+                    },
+                  ]}
+                />
+              ))}
+              <ThemedText style={styles.indicatorText}>
+                {currentImageIndex + 1} of {imageVersions.length}
+              </ThemedText>
+            </View>
+          )}
           
           {/* Primary Action Buttons */}
           <View style={styles.primaryButtonsContainer}>
@@ -268,11 +354,26 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
             <TouchableOpacity
               style={styles.removeButton}
               onPress={() => {
-                setSelectedImage(null);
-                onImageSelected?.('');
+                if (imageVersions.length === 1) {
+                  // Remove all images
+                  setImageVersions([]);
+                  setCurrentImageIndex(0);
+                  onImageSelected?.('');
+                } else {
+                  // Remove current image version
+                  const newVersions = imageVersions.filter((_, index) => index !== currentImageIndex);
+                  setImageVersions(newVersions);
+                  const newIndex = Math.min(currentImageIndex, newVersions.length - 1);
+                  setCurrentImageIndex(newIndex);
+                  if (newVersions.length > 0) {
+                    onImageSelected?.(newVersions[newIndex].uri);
+                  }
+                }
               }}
             >
-              <ThemedText style={styles.removeButtonText}>🗑️ Remove Photo</ThemedText>
+              <ThemedText style={styles.removeButtonText}>
+                🗑️ {imageVersions.length === 1 ? 'Remove Photo' : 'Remove Version'}
+              </ThemedText>
             </TouchableOpacity>
           </View>
         </View>
@@ -309,10 +410,53 @@ const styles = StyleSheet.create({
     marginLeft: -32,
     marginRight: -32,
   },
+  carouselContainer: {
+    width: Dimensions.get('window').width,
+    height: 360,
+  },
+  imageSlide: {
+    width: Dimensions.get('window').width,
+    alignItems: 'center',
+  },
   selectedImage: {
     width: Dimensions.get('window').width,
     height: 300,
-    marginBottom: 24,
+    marginBottom: 8,
+  },
+  imageInfo: {
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  imageInfoText: {
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  imageTimestamp: {
+    fontSize: 12,
+    opacity: 0.7,
+    textAlign: 'center',
+  },
+  indicatorContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 32,
+    marginBottom: 20,
+    gap: 8,
+  },
+  indicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginHorizontal: 2,
+  },
+  indicatorText: {
+    fontSize: 12,
+    marginLeft: 8,
+    opacity: 0.7,
   },
   primaryButtonsContainer: {
     flexDirection: 'column',
