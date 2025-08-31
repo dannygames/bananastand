@@ -1,4 +1,5 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { ResizeMode, Video } from 'expo-av';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import React, { useEffect, useRef, useState } from 'react';
@@ -6,11 +7,18 @@ import { Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } fro
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 
+// API Configuration
+const API_BASE_URL = 'https://www.someonereal.com/api';
+// For development, you can change this to:
+// const API_BASE_URL = 'http://localhost:3000/api';
+
 interface ImageVersion {
   uri: string;
   prompt?: string;
   timestamp: Date;
   isOriginal?: boolean;
+  isVideo?: boolean;
+  videoType?: string;
 }
 
 interface PhotoPickerProps {
@@ -21,6 +29,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const scrollViewRef = useRef<ScrollView>(null);
@@ -207,7 +216,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('📡 Sending request to API...');
 
       // Call your API with explicit headers
-      const apiResponse = await fetch('http://localhost:3000/api/edit-image-gemini', {
+      const apiResponse = await fetch(`${API_BASE_URL}/edit-image-gemini`, {
         method: 'POST',
         body: formData,
         // Don't set Content-Type header - let the browser set it with boundary
@@ -261,7 +270,173 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   };
 
   const handleMakeVideo = () => {
-    Alert.alert('Make Video', 'Video creation functionality coming soon!');
+    if (isGeneratingVideo || !currentImage) return;
+
+    Alert.alert(
+      'Create Video',
+      'Choose the type of video you want to create:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Normal',
+          onPress: () => generateVideo('normal', 'Create a smooth, natural video animation from this image'),
+        },
+        {
+          text: 'Funny',
+          onPress: () => generateVideo('funny', 'Create a fun, comedic video animation with exaggerated movements and humor'),
+        },
+        {
+          text: 'Custom',
+          onPress: () => showCustomVideoPrompt(),
+        },
+      ]
+    );
+  };
+
+  const showCustomVideoPrompt = () => {
+    Alert.prompt(
+      'Custom Video',
+      'Describe the type of video animation you want:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Generate Video',
+          onPress: (customPrompt) => {
+            if (customPrompt && customPrompt.trim()) {
+              generateVideo('custom', customPrompt.trim());
+            } else {
+              Alert.alert('No Description', 'Please provide a description for the video.');
+            }
+          },
+        },
+      ],
+      'plain-text',
+      '',
+      'default'
+    );
+  };
+
+  const generateVideo = async (videoType: string, prompt: string) => {
+    if (!currentImage) return;
+
+    setIsGeneratingVideo(true);
+
+    try {
+      console.log('🎬 Starting video generation...');
+      console.log('📝 Video Type:', videoType);
+      console.log('📝 Prompt:', prompt);
+      console.log('🖼️ Image URI:', currentImage.uri.substring(0, 100) + '...');
+
+      // Convert image to data URL if it's a local file URI
+      let imageUrl = currentImage.uri;
+      
+      if (!currentImage.uri.startsWith('data:') && !currentImage.uri.startsWith('http')) {
+        console.log('🔄 Converting local file URI to data URL...');
+        
+        try {
+          const response = await fetch(currentImage.uri);
+          if (!response.ok) {
+            throw new Error(`Failed to fetch image: ${response.status}`);
+          }
+          
+          const blob = await response.blob();
+          console.log('📦 Image blob size:', blob.size, 'bytes, type:', blob.type);
+          
+          if (blob.size === 0) {
+            throw new Error('Image file is empty or could not be loaded');
+          }
+          
+          // Convert blob to data URL using FileReader (React Native compatible)
+          const base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              const result = reader.result as string;
+              // Extract base64 part from data URL
+              const base64Data = result.split(',')[1];
+              resolve(base64Data);
+            };
+            reader.onerror = () => reject(new Error('Failed to read blob'));
+            reader.readAsDataURL(blob);
+          });
+          
+          const mimeType = blob.type || 'image/jpeg';
+          imageUrl = `data:${mimeType};base64,${base64}`;
+          
+          console.log('✅ Converted to data URL, length:', imageUrl.length);
+        } catch (conversionError) {
+          console.error('❌ Failed to convert image:', conversionError);
+          throw new Error('Failed to prepare image for video generation');
+        }
+      }
+
+      // Call the video generation API
+      const response = await fetch(`${API_BASE_URL}/generate-video`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          prompt: prompt,
+          videoType: videoType,
+          originalPrompt: currentImage.prompt || 'Original image'
+        }),
+      });
+
+      console.log('📡 Video API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ Video API Error:', errorText);
+        throw new Error(`Video API Error (${response.status}): ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log('📋 Video API Result received');
+
+      if (result.success && result.videoUrl) {
+        console.log('✅ Video generation completed successfully');
+        console.log('🎥 Video URL length:', result.videoUrl.length);
+        
+        // Add the video to the carousel
+        const newVideoVersion: ImageVersion = {
+          uri: result.videoUrl,
+          prompt: `${videoType}: ${prompt}`,
+          timestamp: new Date(),
+          isOriginal: false,
+          isVideo: true,
+          videoType: videoType
+        };
+        
+        setImageVersions(prev => {
+          const newVersions = [...prev, newVideoVersion];
+          setCurrentImageIndex(newVersions.length - 1); // Move to the new video
+          return newVersions;
+        });
+        onImageSelected?.(result.videoUrl);
+        
+        console.log('✅ Video added to carousel');
+      } else {
+        throw new Error(result.error || result.details || 'Failed to generate video');
+      }
+
+    } catch (error) {
+      console.error('❌ Video generation failed:', error);
+      
+      Alert.alert(
+        'Video Generation Failed',
+        `Sorry, we couldn't create your video. ${error instanceof Error ? error.message : 'Please try again.'}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setIsGeneratingVideo(false);
+    }
   };
 
   return (
@@ -293,10 +468,26 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           >
             {imageVersions.map((version, index) => (
               <View key={index} style={styles.imageSlide}>
-                <Image source={{ uri: version.uri }} style={styles.selectedImage} />
+                {version.isVideo ? (
+                  <Video
+                    source={{ uri: version.uri }}
+                    style={styles.selectedImage}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay={index === currentImageIndex}
+                    isLooping
+                  />
+                ) : (
+                  <Image source={{ uri: version.uri }} style={styles.selectedImage} />
+                )}
                 <View style={styles.imageInfo}>
                   <ThemedText style={styles.imageInfoText}>
-                    {version.isOriginal ? '📷 Original' : `✏️ ${version.prompt}`}
+                    {version.isOriginal 
+                      ? '📷 Original' 
+                      : version.isVideo 
+                        ? `🎬 ${version.prompt}` 
+                        : `✏️ ${version.prompt}`
+                    }
                   </ThemedText>
                   <ThemedText style={styles.imageTimestamp}>
                     {version.timestamp.toLocaleTimeString()}
@@ -342,10 +533,17 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               </ThemedText>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.primaryButton, styles.videoButton, { backgroundColor: '#007AFF' }]}
+              style={[
+                styles.primaryButton, 
+                styles.videoButton, 
+                { backgroundColor: isGeneratingVideo ? '#999' : '#007AFF' }
+              ]}
               onPress={handleMakeVideo}
+              disabled={isGeneratingVideo || isEditing}
             >
-              <ThemedText style={styles.primaryButtonText}>🎬 Make Video</ThemedText>
+              <ThemedText style={styles.primaryButtonText}>
+                {isGeneratingVideo ? '🎬 Creating Video...' : '🎬 Make Video'}
+              </ThemedText>
             </TouchableOpacity>
           </View>
 
