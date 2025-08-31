@@ -14,6 +14,6 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000', // Instagram-style black background
+    // backgroundColor removed - will be set by ThemedView based on theme
   },
 });

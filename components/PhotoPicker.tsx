@@ -35,7 +35,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
+  const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
+  const iconColor = useThemeColor({}, 'icon');
   const scrollViewRef = useRef<ScrollView>(null);
   const insets = useSafeAreaInsets();
 
@@ -560,23 +562,23 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor }]}>
       {imageVersions.length === 0 ? (
         // Empty state - Instagram-style onboarding
-        <View style={styles.emptyState}>
+        <View style={[styles.emptyState, { backgroundColor }]}>
           <View style={styles.emptyStateContent}>
             <View style={styles.cameraIcon}>
-              <Ionicons name="camera" size={50} color="rgba(255, 255, 255, 0.8)" />
+              <Ionicons name="camera" size={50} color={iconColor} />
             </View>
-            <ThemedText style={styles.emptyStateTitle}>Share a moment</ThemedText>
+            <ThemedText style={styles.emptyStateTitle}>Add a Photo</ThemedText>
             <ThemedText style={styles.emptyStateSubtitle}>
               Take a photo or choose from your library to get started
             </ThemedText>
             <TouchableOpacity
-              style={styles.primaryActionButton}
+              style={[styles.primaryActionButton, { backgroundColor: tintColor }]}
               onPress={showImagePickerOptions}
             >
-              <Text style={styles.primaryActionButtonText}>
+              <Text style={[styles.primaryActionButtonText, { color: backgroundColor }]}>
                 Add Photo
               </Text>
             </TouchableOpacity>
@@ -584,7 +586,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         </View>
       ) : (
         // Instagram-style full screen layout
-        <View style={styles.fullScreenContainer}>
+        <View style={[styles.fullScreenContainer, { backgroundColor }]}>
           {/* Full Screen Image Carousel */}
           <View style={styles.mediaContainer}>
             <ScrollView
@@ -626,7 +628,10 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
             <TouchableOpacity
               style={[
                 styles.floatingCloseButton,
-                { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+                { 
+                  opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1,
+                  backgroundColor: `rgba(${backgroundColor === '#fff' ? '0, 0, 0' : '255, 255, 255'}, 0.6)`
+                }
               ]}
               onPress={() => {
                 if (imageVersions.length === 1) {
@@ -647,20 +652,20 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               }}
               disabled={isEditing || isGeneratingVideo || isSaving}
             >
-              <Ionicons name="close" size={24} color="#ffffff" />
+              <Ionicons name="close" size={24} color={backgroundColor === '#fff' ? '#ffffff' : '#000000'} />
             </TouchableOpacity>
 
             {/* Loading Overlay */}
             {(isEditing || isGeneratingVideo || isSaving) && (
               <View style={styles.loadingOverlay}>
                 <View style={styles.loadingContainer}>
-                  <ActivityIndicator size="large" color="#ffffff" />
-                  <Text style={styles.loadingText}>
+                  <ActivityIndicator size="large" color={textColor} />
+                  <Text style={[styles.loadingText, { color: textColor }]}>
                     {isEditing ? 'Editing image...' : isGeneratingVideo ? 'Generating video...' : 'Saving media...'}
                   </Text>
-                  <Text style={styles.loadingSubtext}>
+                  <Text style={[styles.loadingSubtext, { color: textColor }]}>
                     {isEditing 
-                      ? 'AI is enhancing your photo' 
+                      ? 'Editing your photo' 
                       : isGeneratingVideo 
                         ? 'Creating your video animation'
                         : 'Saving to your photo library'
@@ -672,7 +677,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           </View>
 
           {/* Instagram-style bottom action bar */}
-          <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 20, 80) }]}>
+          <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 20, 80), backgroundColor: `rgba(${backgroundColor === '#fff' ? '255, 255, 255' : '0, 0, 0'}, 0.95)` }]}>
             {/* Story dots indicator */}
             {imageVersions.length > 1 && (
                 <View style={styles.mediaDotsContainer}>
@@ -751,12 +756,12 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 <View style={styles.actionButtonContainer}>
                   <View style={styles.iconContainer}>
                     {isEditing ? (
-                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
                     ) : (
-                      <Feather name="edit-3" size={26} color="#ffffff" />
+                      <Feather name="edit-3" size={26} color={textColor} />
                     )}
                   </View>
-                  <Text style={styles.actionButtonLabel}>
+                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
                     {isEditing ? 'Editing' : 'Edit'}
                   </Text>
                 </View>
@@ -773,12 +778,12 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 <View style={styles.actionButtonContainer}>
                   <View style={styles.iconContainer}>
                     {isGeneratingVideo ? (
-                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
                     ) : (
-                      <Ionicons name="videocam" size={26} color="#ffffff" />
+                      <Ionicons name="videocam" size={26} color={textColor} />
                     )}
                   </View>
-                  <Text style={styles.actionButtonLabel}>
+                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
                     {isGeneratingVideo ? 'Creating' : 'Video'}
                   </Text>
                 </View>
@@ -795,12 +800,12 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 <View style={styles.actionButtonContainer}>
                   <View style={styles.iconContainer}>
                     {isSaving ? (
-                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
                     ) : (
-                      <Ionicons name="download-outline" size={26} color="#ffffff" />
+                      <Ionicons name="download-outline" size={26} color={textColor} />
                     )}
                   </View>
-                  <Text style={styles.actionButtonLabel}>
+                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
                     {isSaving ? 'Saving' : 'Save'}
                   </Text>
                 </View>
@@ -816,9 +821,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               >
                 <View style={styles.actionButtonContainer}>
                   <View style={styles.iconContainer}>
-                    <Ionicons name="camera" size={26} color="#ffffff" />
+                    <Ionicons name="camera" size={26} color={textColor} />
                   </View>
-                  <Text style={styles.actionButtonLabel}>New</Text>
+                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>New</Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -832,14 +837,14 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    // backgroundColor will be set dynamically based on theme
   },
   // Empty state styles
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#000',
+    // backgroundColor will be set dynamically based on theme
     paddingHorizontal: 40,
     paddingTop: 60, // Add top padding to prevent text cutoff
     paddingBottom: 40,
@@ -861,7 +866,7 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#fff',
+    // color will be set by ThemedText based on theme
     textAlign: 'center',
     marginBottom: 12,
     lineHeight: 34, // Add proper line height
@@ -869,27 +874,23 @@ const styles = StyleSheet.create({
   },
   emptyStateSubtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    // color will be set by ThemedText based on theme
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 40,
+    opacity: 0.7,
   },
   primaryActionButton: {
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 25,
     minWidth: 160,
-    backgroundColor: '#ffffff',
+    // backgroundColor will be set dynamically to tintColor
     borderWidth: 1,
     borderColor: 'rgba(0, 0, 0, 0.1)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
-    elevation: 8,
   },
   primaryActionButtonText: {
-    color: '#000000',
+    // color will be set dynamically based on theme
     fontSize: 16,
     fontWeight: '600',
     textAlign: 'center',
@@ -897,7 +898,7 @@ const styles = StyleSheet.create({
   // Full screen layout styles
   fullScreenContainer: {
     flex: 1,
-    backgroundColor: '#000',
+    // backgroundColor will be set dynamically based on theme
   },
   mediaContainer: {
     flex: 1,
@@ -924,15 +925,10 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    // backgroundColor will be set dynamically based on theme
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
-    elevation: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
   },
   loadingOverlay: {
     position: 'absolute',
@@ -944,7 +940,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 20, // Above everything else
-    elevation: 20,
   },
   loadingContainer: {
     alignItems: 'center',
@@ -955,18 +950,19 @@ const styles = StyleSheet.create({
     minWidth: 200,
   },
   loadingText: {
-    color: '#ffffff',
+    // color will be set dynamically based on theme
     fontSize: 18,
     fontWeight: '600',
     marginTop: 16,
     textAlign: 'center',
   },
   loadingSubtext: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    // color will be set dynamically based on theme with opacity
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
     maxWidth: 250,
+    opacity: 0.7,
   },
   // Bottom action bar styles
   bottomActionBar: {
@@ -974,28 +970,28 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    // backgroundColor will be set dynamically based on theme
     paddingBottom: 80, // Significantly increased for safe area
     paddingTop: 24,
     paddingHorizontal: 16,
     minHeight: 280, // Increased to accommodate media controls
     justifyContent: 'flex-start',
     zIndex: 20, // Ensure it's above other content
-    elevation: 20, // For Android
   },
   mediaInfo: {
     marginBottom: 16,
     marginTop: 20, // Add space between story dots and media info
   },
   mediaInfoText: {
-    color: '#fff',
+    // color will be set by ThemedText based on theme
     fontSize: 16,
     fontWeight: '600',
     marginBottom: 4,
   },
   mediaTimestamp: {
-    color: 'rgba(255, 255, 255, 0.7)',
+    // color will be set by ThemedText based on theme
     fontSize: 13,
+    opacity: 0.7,
   },
   mediaControlsRow: {
     flexDirection: 'row',
@@ -1038,7 +1034,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 20,
     zIndex: 25,
-    elevation: 25,
   },
   actionButton: {
     alignItems: 'center',
@@ -1047,26 +1042,19 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     zIndex: 25,
-    elevation: 25,
   },
   actionButtonContainer: {
     alignItems: 'center',
     justifyContent: 'center',
   },
   iconContainer: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
+    // Shadow removed for cleaner look
   },
   actionButtonLabel: {
-    color: '#ffffff',
+    // color will be set dynamically based on theme
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
     marginTop: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 3,
   },
 });

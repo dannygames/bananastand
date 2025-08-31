@@ -1,4 +1,5 @@
 import { ThemedText } from '@/components/ThemedText';
+import { ThemedView } from '@/components/ThemedView';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import React from 'react';
@@ -11,14 +12,15 @@ export default function HelpScreen() {
   const insets = useSafeAreaInsets();
 
   return (
-    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
-      <ScrollView 
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
-        bounces={true}
-        alwaysBounceVertical={false}
-      >
+    <ThemedView style={styles.container}>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <ScrollView 
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+          alwaysBounceVertical={false}
+        >
         {/* Header */}
         <View style={styles.header}>
           <ThemedText style={styles.title}>Help & Tutorial</ThemedText>
@@ -30,7 +32,7 @@ export default function HelpScreen() {
         {/* Step 1 */}
         <View style={styles.stepContainer}>
           <View style={[styles.stepNumber, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.stepNumberText}>1</ThemedText>
+            <ThemedText style={[styles.stepNumberText, { color: backgroundColor }]}>1</ThemedText>
           </View>
           <View style={styles.stepContent}>
             <View style={styles.stepHeader}>
@@ -52,7 +54,7 @@ export default function HelpScreen() {
         {/* Step 2 */}
         <View style={styles.stepContainer}>
           <View style={[styles.stepNumber, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.stepNumberText}>2</ThemedText>
+            <ThemedText style={[styles.stepNumberText, { color: backgroundColor }]}>2</ThemedText>
           </View>
           <View style={styles.stepContent}>
             <View style={styles.stepHeader}>
@@ -75,7 +77,7 @@ export default function HelpScreen() {
         {/* Step 3 */}
         <View style={styles.stepContainer}>
           <View style={[styles.stepNumber, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.stepNumberText}>3</ThemedText>
+            <ThemedText style={[styles.stepNumberText, { color: backgroundColor }]}>3</ThemedText>
           </View>
           <View style={styles.stepContent}>
             <View style={styles.stepHeader}>
@@ -105,7 +107,7 @@ export default function HelpScreen() {
         {/* Step 4 */}
         <View style={styles.stepContainer}>
           <View style={[styles.stepNumber, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.stepNumberText}>4</ThemedText>
+            <ThemedText style={[styles.stepNumberText, { color: backgroundColor }]}>4</ThemedText>
           </View>
           <View style={styles.stepContent}>
             <View style={styles.stepHeader}>
@@ -131,7 +133,7 @@ export default function HelpScreen() {
         {/* Step 5 */}
         <View style={styles.stepContainer}>
           <View style={[styles.stepNumber, { backgroundColor: tintColor }]}>
-            <ThemedText style={styles.stepNumberText}>5</ThemedText>
+            <ThemedText style={[styles.stepNumberText, { color: backgroundColor }]}>5</ThemedText>
           </View>
           <View style={styles.stepContent}>
             <View style={styles.stepHeader}>
@@ -191,15 +193,19 @@ export default function HelpScreen() {
             Ready to get started? Head to the Home tab and add your first photo!
           </ThemedText>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+        </ScrollView>
+      </SafeAreaView>
+    </ThemedView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000', // Ensure background color
+    // backgroundColor will be set by ThemedView based on theme
+  },
+  safeArea: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
@@ -244,7 +250,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   stepNumberText: {
-    color: '#fff',
+    // color will be set dynamically to contrast with tint color background
     fontSize: 16,
     fontWeight: '700',
   },
