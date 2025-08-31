@@ -14,6 +14,7 @@
       "infoPlist": {
         "NSCameraUsageDescription": "This app needs access to camera to take photos and videos.",
         "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select images.",
+        "NSPhotoLibraryAddUsageDescription": "This app needs access to save photos and videos to your photo library.",
         "NSMicrophoneUsageDescription": "This app needs access to microphone for video recording."
       }
     },
@@ -27,8 +28,15 @@
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.ACCESS_MEDIA_LOCATION"
+      ],
+      "package": "com.anonymous.bananastand"
     },
     "web": {
       "bundler": "metro",
@@ -51,6 +59,14 @@
         {
           "photosPermission": "The app accesses your photos to let you share them.",
           "cameraPermission": "The app accesses your camera to let you take photos."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow this app to access your photos to save edited images and videos.",
+          "savePhotosPermission": "Allow this app to save photos and videos to your photo library.",
+          "isAccessMediaLocationEnabled": true
         }
       ]
     ],

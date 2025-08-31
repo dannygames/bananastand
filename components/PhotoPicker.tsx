@@ -1,11 +1,14 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import React, { useEffect, useRef, useState } from 'react';
-import { Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
-import { ThemedView } from './ThemedView';
 
 // API Configuration
 const API_BASE_URL = 'https://www.someonereal.com/api';
@@ -30,9 +33,11 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isEditing, setIsEditing] = useState(false);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'tint');
   const scrollViewRef = useRef<ScrollView>(null);
+  const insets = useSafeAreaInsets();
 
   const currentImage = imageVersions.length > 0 ? imageVersions[currentImageIndex] : null;
 
@@ -48,17 +53,31 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   }, [currentImageIndex]);
 
   const requestPermissions = async () => {
-    const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
-    const { status: mediaLibraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    
-    if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
+    try {
+      console.log('📋 Requesting permissions...');
+      
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      console.log('📷 Camera permission status:', cameraStatus);
+      
+      const { status: mediaLibraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      console.log('📁 Media library permission status:', mediaLibraryStatus);
+      
+      if (cameraStatus !== 'granted' || mediaLibraryStatus !== 'granted') {
+        Alert.alert(
+          'Permissions Required',
+          'Sorry, we need camera and photo library permissions to make this work!'
+        );
+        return false;
+      }
+      return true;
+    } catch (error) {
+      console.error('❌ Permission request failed:', error);
       Alert.alert(
-        'Permissions Required',
-        'Sorry, we need camera and photo library permissions to make this work!'
+        'Permission Error',
+        'Failed to request permissions. Please check your device settings.'
       );
       return false;
     }
-    return true;
   };
 
   const showImagePickerOptions = () => {
@@ -89,8 +108,6 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.8,
       });
 
@@ -118,8 +135,6 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [4, 3],
         quality: 0.8,
       });
 
@@ -152,7 +167,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           style: 'cancel',
         },
         {
-          text: 'Apply Edit',
+          text: 'Apply',
           onPress: async (editDescription) => {
             if (editDescription && editDescription.trim() && currentImage) {
               await processImageEdit(editDescription.trim());
@@ -439,121 +454,183 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     }
   };
 
+  const handleSaveMedia = async () => {
+    if (!currentImage || isSaving) return;
+
+    setIsSaving(true);
+
+    try {
+      console.log('💾 Starting media save...');
+      console.log('📁 Media type:', currentImage.isVideo ? 'video' : 'image');
+      console.log('📂 Media URI:', currentImage.uri.substring(0, 100) + '...');
+
+      // Request media library permissions
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permission Required',
+          'We need access to your photo library to save media.'
+        );
+        return;
+      }
+
+      let localUri: string;
+
+      // Handle different URI types
+      if (currentImage.uri.startsWith('data:')) {
+        // Data URL - need to save to temp file first
+        console.log('💾 Converting data URL to file...');
+        
+        const fileExtension = currentImage.isVideo ? 'mp4' : 'jpg';
+        const fileName = `${currentImage.isVideo ? 'video' : 'image'}_${Date.now()}.${fileExtension}`;
+        const tempUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        // Extract base64 data and write to file
+        const base64Data = currentImage.uri.split(',')[1];
+        await FileSystem.writeAsStringAsync(tempUri, base64Data, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        
+        localUri = tempUri;
+        console.log('✅ Temp file created:', tempUri);
+      } else if (currentImage.uri.startsWith('http')) {
+        // HTTP URL - download first
+        console.log('📥 Downloading from URL...');
+        
+        const fileExtension = currentImage.isVideo ? 'mp4' : 'jpg';
+        const fileName = `${currentImage.isVideo ? 'video' : 'image'}_${Date.now()}.${fileExtension}`;
+        const tempUri = `${FileSystem.documentDirectory}${fileName}`;
+        
+        const downloadResult = await FileSystem.downloadAsync(currentImage.uri, tempUri);
+        localUri = downloadResult.uri;
+        console.log('✅ Downloaded to:', localUri);
+      } else {
+        // Local file URI - use directly
+        localUri = currentImage.uri;
+        console.log('✅ Using local file directly');
+      }
+
+      // Save to media library
+      console.log('💾 Saving to media library...');
+      const asset = await MediaLibrary.createAssetAsync(localUri);
+      
+      // Add to album if desired (optional)
+      const albumName = 'AI Creations';
+      try {
+        let album = await MediaLibrary.getAlbumAsync(albumName);
+        if (!album) {
+          album = await MediaLibrary.createAlbumAsync(albumName, asset, false);
+        } else {
+          await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
+        }
+        console.log(`✅ Saved to ${albumName} album`);
+      } catch (albumError) {
+        console.log('📁 Saved to camera roll (album creation failed)');
+      }
+
+      // Clean up temp file if we created one
+      if (currentImage.uri.startsWith('data:') || currentImage.uri.startsWith('http')) {
+        try {
+          await FileSystem.deleteAsync(localUri);
+          console.log('🗑️ Cleaned up temp file');
+        } catch (cleanupError) {
+          console.log('⚠️ Could not clean up temp file');
+        }
+      }
+
+      Alert.alert(
+        'Saved! 💾',
+        `Your ${currentImage.isVideo ? 'video' : 'image'} has been saved to your photo library.`,
+        [{ text: 'Great!', style: 'default' }]
+      );
+
+      console.log('✅ Media save completed successfully');
+
+    } catch (error) {
+      console.error('❌ Media save failed:', error);
+      
+      Alert.alert(
+        'Save Failed',
+        `Sorry, we couldn't save your ${currentImage.isVideo ? 'video' : 'image'}. ${error instanceof Error ? error.message : 'Please try again.'}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
-    <ThemedView style={styles.container}>
-      <TouchableOpacity
-        style={[styles.button, { borderColor: tintColor }]}
-        onPress={showImagePickerOptions}
-      >
-        <ThemedText style={[styles.buttonText, { color: tintColor }]}>
-          {imageVersions.length > 0 ? 'Change Photo' : 'Select Photo'}
-        </ThemedText>
-      </TouchableOpacity>
-
-      {imageVersions.length > 0 && (
-        <View style={styles.imageContainer}>
-          {/* Image Carousel */}
-          <ScrollView
-            ref={scrollViewRef}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            style={styles.carouselContainer}
-            onMomentumScrollEnd={(event) => {
-              const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
-              if (newIndex !== currentImageIndex) {
-                setCurrentImageIndex(newIndex);
-              }
-            }}
-          >
-            {imageVersions.map((version, index) => (
-              <View key={index} style={styles.imageSlide}>
-                {version.isVideo ? (
-                  <Video
-                    source={{ uri: version.uri }}
-                    style={styles.selectedImage}
-                    useNativeControls
-                    resizeMode={ResizeMode.CONTAIN}
-                    shouldPlay={index === currentImageIndex}
-                    isLooping
-                  />
-                ) : (
-                  <Image source={{ uri: version.uri }} style={styles.selectedImage} />
-                )}
-                <View style={styles.imageInfo}>
-                  <ThemedText style={styles.imageInfoText}>
-                    {version.isOriginal 
-                      ? '📷 Original' 
-                      : version.isVideo 
-                        ? `🎬 ${version.prompt}` 
-                        : `✏️ ${version.prompt}`
-                    }
-                  </ThemedText>
-                  <ThemedText style={styles.imageTimestamp}>
-                    {version.timestamp.toLocaleTimeString()}
-                  </ThemedText>
-                </View>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Carousel Indicators */}
-          {imageVersions.length > 1 && (
-            <View style={styles.indicatorContainer}>
-              {imageVersions.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.indicator,
-                    {
-                      backgroundColor: index === currentImageIndex ? tintColor : '#ccc',
-                    },
-                  ]}
-                />
-              ))}
-              <ThemedText style={styles.indicatorText}>
-                {currentImageIndex + 1} of {imageVersions.length}
-              </ThemedText>
+    <View style={styles.container}>
+      {imageVersions.length === 0 ? (
+        // Empty state - Instagram-style onboarding
+        <View style={styles.emptyState}>
+          <View style={styles.emptyStateContent}>
+            <View style={styles.cameraIcon}>
+              <Ionicons name="camera" size={50} color="rgba(255, 255, 255, 0.8)" />
             </View>
-          )}
-          
-          {/* Primary Action Buttons */}
-          <View style={styles.primaryButtonsContainer}>
+            <ThemedText style={styles.emptyStateTitle}>Share a moment</ThemedText>
+            <ThemedText style={styles.emptyStateSubtitle}>
+              Take a photo or choose from your library to get started
+            </ThemedText>
             <TouchableOpacity
-              style={[
-                styles.primaryButton, 
-                styles.editButton, 
-                { backgroundColor: isEditing ? '#999' : tintColor }
-              ]}
-              onPress={handleEditPhoto}
-              disabled={isEditing}
+              style={styles.primaryActionButton}
+              onPress={showImagePickerOptions}
             >
-              <ThemedText style={styles.primaryButtonText}>
-                {isEditing ? '🔄 Editing...' : '✏️ Edit Photo'}
-              </ThemedText>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.primaryButton, 
-                styles.videoButton, 
-                { backgroundColor: isGeneratingVideo ? '#999' : '#007AFF' }
-              ]}
-              onPress={handleMakeVideo}
-              disabled={isGeneratingVideo || isEditing}
-            >
-              <ThemedText style={styles.primaryButtonText}>
-                {isGeneratingVideo ? '🎬 Creating Video...' : '🎬 Make Video'}
-              </ThemedText>
+              <Text style={styles.primaryActionButtonText}>
+                Add Photo
+              </Text>
             </TouchableOpacity>
           </View>
-
-          {/* Secondary Action */}
-          <View style={styles.secondaryButtonContainer}>
+        </View>
+      ) : (
+        // Instagram-style full screen layout
+        <View style={styles.fullScreenContainer}>
+          {/* Full Screen Image Carousel */}
+          <View style={styles.mediaContainer}>
+            <ScrollView
+              ref={scrollViewRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={styles.fullScreenCarousel}
+              onMomentumScrollEnd={(event) => {
+                const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+                if (newIndex !== currentImageIndex) {
+                  setCurrentImageIndex(newIndex);
+                }
+              }}
+            >
+              {imageVersions.map((version, index) => (
+                <View key={index} style={styles.fullScreenSlide}>
+                  {version.isVideo ? (
+                    <Video
+                      source={{ uri: version.uri }}
+                      style={styles.fullScreenMedia}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      shouldPlay={index === currentImageIndex}
+                      isLooping
+                    />
+                  ) : (
+                    <Image 
+                      source={{ uri: version.uri }} 
+                      style={styles.fullScreenMedia}
+                      contentFit="contain"
+                    />
+                  )}
+                </View>
+              ))}
+            </ScrollView>
+            
+            {/* Floating X button - top right */}
             <TouchableOpacity
-              style={styles.removeButton}
+              style={[
+                styles.floatingCloseButton,
+                { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+              ]}
               onPress={() => {
                 if (imageVersions.length === 1) {
-                  // Remove all images
+                  // Remove all images if only one left
                   setImageVersions([]);
                   setCurrentImageIndex(0);
                   onImageSelected?.('');
@@ -568,140 +645,428 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                   }
                 }
               }}
+              disabled={isEditing || isGeneratingVideo || isSaving}
             >
-              <ThemedText style={styles.removeButtonText}>
-                🗑️ {imageVersions.length === 1 ? 'Remove Photo' : 'Remove Version'}
-              </ThemedText>
+              <Ionicons name="close" size={24} color="#ffffff" />
             </TouchableOpacity>
+
+            {/* Loading Overlay */}
+            {(isEditing || isGeneratingVideo || isSaving) && (
+              <View style={styles.loadingOverlay}>
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#ffffff" />
+                  <Text style={styles.loadingText}>
+                    {isEditing ? 'Editing image...' : isGeneratingVideo ? 'Generating video...' : 'Saving media...'}
+                  </Text>
+                  <Text style={styles.loadingSubtext}>
+                    {isEditing 
+                      ? 'AI is enhancing your photo' 
+                      : isGeneratingVideo 
+                        ? 'Creating your video animation'
+                        : 'Saving to your photo library'
+                    }
+                  </Text>
+                </View>
+              </View>
+            )}
+          </View>
+
+          {/* Instagram-style bottom action bar */}
+          <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 20, 80) }]}>
+            {/* Story dots indicator */}
+            {imageVersions.length > 1 && (
+                <View style={styles.mediaDotsContainer}>
+                  {imageVersions.map((_, index) => (
+                    <View
+                      key={index}
+                      style={[
+                        styles.mediaDot,
+                        {
+                          backgroundColor: index === currentImageIndex 
+                            ? 'rgba(255, 255, 255, 1)' 
+                            : 'rgba(255, 255, 255, 0.3)',
+                        },
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+            
+            {/* Media info */}
+            <View style={styles.mediaInfo}>
+              <ThemedText style={styles.mediaInfoText} numberOfLines={2}>
+                {currentImage?.isOriginal 
+                  ? 'Original' 
+                  : currentImage?.isVideo 
+                    ? currentImage.prompt 
+                    : currentImage?.prompt
+                }
+              </ThemedText>
+              {/* <ThemedText style={styles.mediaTimestamp}>
+                {currentImage?.timestamp.toLocaleString()}
+              </ThemedText> */}
+            </View>
+
+            {/* Media controls (moved from top) */}
+            {/* <View style={styles.mediaControlsRow}>
+              <TouchableOpacity
+                style={styles.mediaControlButton}
+                onPress={showImagePickerOptions}
+              >
+                <Ionicons name="close" size={20} color="#ffffff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.mediaControlButton}
+                onPress={() => {
+                  if (imageVersions.length === 1) {
+                    setImageVersions([]);
+                    setCurrentImageIndex(0);
+                    onImageSelected?.('');
+                  } else {
+                    const newVersions = imageVersions.filter((_, index) => index !== currentImageIndex);
+                    setImageVersions(newVersions);
+                    const newIndex = Math.min(currentImageIndex, newVersions.length - 1);
+                    setCurrentImageIndex(newIndex);
+                    if (newVersions.length > 0) {
+                      onImageSelected?.(newVersions[newIndex].uri);
+                    }
+                  }
+                }}
+              >
+                <Ionicons name="trash-outline" size={20} color="#ffffff" />
+              </TouchableOpacity>
+            </View> */}
+
+            {/* Action buttons row */}
+            <View style={styles.actionButtonsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+                ]}
+                onPress={handleEditPhoto}
+                disabled={isEditing || isGeneratingVideo || isSaving}
+              >
+                <View style={styles.actionButtonContainer}>
+                  <View style={styles.iconContainer}>
+                    {isEditing ? (
+                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                    ) : (
+                      <Feather name="edit-3" size={26} color="#ffffff" />
+                    )}
+                  </View>
+                  <Text style={styles.actionButtonLabel}>
+                    {isEditing ? 'Editing' : 'Edit'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+                ]}
+                onPress={handleMakeVideo}
+                disabled={isEditing || isGeneratingVideo || isSaving}
+              >
+                <View style={styles.actionButtonContainer}>
+                  <View style={styles.iconContainer}>
+                    {isGeneratingVideo ? (
+                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                    ) : (
+                      <Ionicons name="videocam" size={26} color="#ffffff" />
+                    )}
+                  </View>
+                  <Text style={styles.actionButtonLabel}>
+                    {isGeneratingVideo ? 'Creating' : 'Video'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+                ]}
+                onPress={handleSaveMedia}
+                disabled={isEditing || isGeneratingVideo || isSaving}
+              >
+                <View style={styles.actionButtonContainer}>
+                  <View style={styles.iconContainer}>
+                    {isSaving ? (
+                      <Ionicons name="hourglass-outline" size={26} color="#ffffff" />
+                    ) : (
+                      <Ionicons name="download-outline" size={26} color="#ffffff" />
+                    )}
+                  </View>
+                  <Text style={styles.actionButtonLabel}>
+                    {isSaving ? 'Saving' : 'Save'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
+                ]}
+                onPress={showImagePickerOptions}
+                disabled={isEditing || isGeneratingVideo || isSaving}
+              >
+                <View style={styles.actionButtonContainer}>
+                  <View style={styles.iconContainer}>
+                    <Ionicons name="camera" size={26} color="#ffffff" />
+                  </View>
+                  <Text style={styles.actionButtonLabel}>New</Text>
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       )}
-    </ThemedView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  // Empty state styles
+  emptyState: {
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginVertical: 20,
+    backgroundColor: '#000',
+    paddingHorizontal: 40,
+    paddingTop: 60, // Add top padding to prevent text cutoff
+    paddingBottom: 40,
   },
-  button: {
-    borderWidth: 2,
-    borderRadius: 12,
-    paddingVertical: 14,
+  emptyStateContent: {
+    alignItems: 'center',
+    maxWidth: 300,
+  },
+  cameraIcon: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 32,
+  },
+
+  emptyStateTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#fff',
+    textAlign: 'center',
+    marginBottom: 12,
+    lineHeight: 34, // Add proper line height
+    marginTop: 8, // Add small top margin for breathing room
+  },
+  emptyStateSubtitle: {
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.7)',
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: 40,
+  },
+  primaryActionButton: {
+    paddingVertical: 16,
     paddingHorizontal: 32,
-    marginBottom: 20,
-    elevation: 2,
+    borderRadius: 25,
+    minWidth: 160,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  buttonText: {
+  primaryActionButtonText: {
+    color: '#000000',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center',
   },
-  imageContainer: {
-    alignItems: 'center',
-    marginTop: 20,
-    width: '100%',
-    marginLeft: -32,
-    marginRight: -32,
+  // Full screen layout styles
+  fullScreenContainer: {
+    flex: 1,
+    backgroundColor: '#000',
   },
-  carouselContainer: {
+  mediaContainer: {
+    flex: 1,
+    marginBottom: 280, // Increased to account for larger bottom action bar with controls
+    zIndex: 1, // Keep media below overlays
+  },
+  fullScreenCarousel: {
+    flex: 1,
+  },
+  fullScreenSlide: {
     width: Dimensions.get('window').width,
-    height: 360,
-  },
-  imageSlide: {
-    width: Dimensions.get('window').width,
+    flex: 1,
+    justifyContent: 'center',
     alignItems: 'center',
   },
-  selectedImage: {
+  fullScreenMedia: {
     width: Dimensions.get('window').width,
-    height: 300,
-    marginBottom: 8,
+    flex: 1,
   },
-  imageInfo: {
-    paddingHorizontal: 32,
+  floatingCloseButton: {
+    position: 'absolute',
+    top: 60, // Account for status bar
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
     alignItems: 'center',
+    zIndex: 10,
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 20, // Above everything else
+    elevation: 20,
+  },
+  loadingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    borderRadius: 20,
+    minWidth: 200,
+  },
+  loadingText: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loadingSubtext: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: 'center',
+    maxWidth: 250,
+  },
+  // Bottom action bar styles
+  bottomActionBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    paddingBottom: 80, // Significantly increased for safe area
+    paddingTop: 24,
+    paddingHorizontal: 16,
+    minHeight: 280, // Increased to accommodate media controls
+    justifyContent: 'flex-start',
+    zIndex: 20, // Ensure it's above other content
+    elevation: 20, // For Android
+  },
+  mediaInfo: {
+    marginBottom: 16,
+    marginTop: 20, // Add space between story dots and media info
+  },
+  mediaInfoText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  mediaTimestamp: {
+    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 13,
+  },
+  mediaControlsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     marginBottom: 16,
   },
-  imageInfoText: {
+  mediaControlButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  mediaDotsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    marginBottom: 12, // Add bottom margin for separation
+  },
+  mediaDot: {
+    height: 4,
+    width: 20,
+    borderRadius: 2,
+  },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 20,
+    zIndex: 25,
+    elevation: 25,
+  },
+  actionButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 60,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    zIndex: 25,
+    elevation: 25,
+  },
+  actionButtonContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconContainer: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+  actionButtonLabel: {
+    color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    marginBottom: 4,
-  },
-  imageTimestamp: {
-    fontSize: 12,
-    opacity: 0.7,
-    textAlign: 'center',
-  },
-  indicatorContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 32,
-    marginBottom: 20,
-    gap: 8,
-  },
-  indicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginHorizontal: 2,
-  },
-  indicatorText: {
-    fontSize: 12,
-    marginLeft: 8,
-    opacity: 0.7,
-  },
-  primaryButtonsContainer: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-    paddingHorizontal: 32,
-    marginBottom: 20,
-    gap: 12,
-  },
-  primaryButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    elevation: 3,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-  },
-  editButton: {
-    // Additional styling for edit button if needed
-  },
-  videoButton: {
-    // Additional styling for video button if needed
-  },
-  primaryButtonText: {
-    color: 'white',
-    fontSize: 17,
-    fontWeight: '700',
-    textAlign: 'center',
-    letterSpacing: 0.5,
-  },
-  secondaryButtonContainer: {
-    paddingHorizontal: 32,
     marginTop: 8,
-  },
-  removeButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: '#ff4444',
-  },
-  removeButtonText: {
-    color: '#ff4444',
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
 });
