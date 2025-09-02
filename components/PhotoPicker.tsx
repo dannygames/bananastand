@@ -537,7 +537,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               }}
             >
               {imageVersions.map((version, index) => (
-                <View key={index} style={styles.fullScreenSlide}>
+                <View key={index} style={[styles.fullScreenSlide, { backgroundColor }]}>
                   {version.isVideo ? (
                     <Video
                       source={{ uri: version.uri }}
@@ -611,7 +611,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           </View>
 
           {/* Instagram-style bottom action bar */}
-          <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 20, 80), backgroundColor: `rgba(${backgroundColor === '#fff' ? '255, 255, 255' : '0, 0, 0'}, 0.95)` }]}>
+          <View style={[styles.bottomActionBar, { paddingBottom: Math.max(insets.bottom + 20, 80), backgroundColor }]}>
             {/* Story dots indicator */}
             {imageVersions.length > 1 && (
                 <View style={styles.mediaDotsContainer}>
