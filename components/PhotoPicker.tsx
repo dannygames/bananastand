@@ -10,10 +10,8 @@ import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, Tou
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
 
-// API Configuration
-const API_BASE_URL = 'https://www.someonereal.com/api';
-// For development, you can change this to:
-// const API_BASE_URL = 'http://localhost:3000/api';
+// Import API service
+import { ApiService, buildApiUrl } from '@/services/api';
 
 interface ImageVersion {
   uri: string;
@@ -185,6 +183,15 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     );
   };
 
+  const uploadImageToR2 = async (imageUri: string): Promise<string> => {
+    console.log('📡 Uploading image to R2...');
+    
+    const publicUrl = await ApiService.uploadImage(imageUri);
+    
+    console.log('✅ Image uploaded to R2:', publicUrl);
+    return publicUrl;
+  };
+
   const processImageEdit = async (prompt: string) => {
     if (!currentImage) return;
 
@@ -194,60 +201,31 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('🎨 Starting image edit with prompt:', prompt);
       console.log('📂 Image URI:', currentImage.uri.substring(0, 100) + '...');
       
-      let imageBlob: Blob;
+      // First, upload the current image to R2 if it's not already there
+      let imageUrl = currentImage.uri;
       
-      if (currentImage.uri.startsWith('data:')) {
-        // Handle base64 data URI
-        console.log('📄 Converting base64 data URI to blob...');
-        const response = await fetch(currentImage.uri);
-        imageBlob = await response.blob();
-      } else {
-        // Handle file URI (from camera/gallery)
-        console.log('📁 Fetching image from URI...');
-        const response = await fetch(currentImage.uri);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch image: ${response.status}`);
-        }
-        imageBlob = await response.blob();
+      if (!currentImage.uri.startsWith('http')) {
+        imageUrl = await uploadImageToR2(currentImage.uri);
       }
       
-      console.log('📦 Image blob size:', imageBlob.size, 'bytes, type:', imageBlob.type);
-      
-      if (imageBlob.size === 0) {
-        throw new Error('Image file is empty or could not be loaded');
-      }
-      
-      // Create FormData for the API request
-      const formData = new FormData();
-      formData.append('prompt', prompt);
-      
-      // For React Native, we need to create a proper file-like object
-      const imageFile = {
-        uri: currentImage.uri,
-        type: imageBlob.type || 'image/jpeg',
-        name: 'image.jpg',
-      };
-      
-      formData.append('image', imageFile as any);
-
-      console.log('📡 Sending request to API...');
-
-      // Call your API with explicit headers
-      const apiResponse = await fetch(`${API_BASE_URL}/edit-image-gemini`, {
+      // Call the edit-image API with the R2 URL
+      const response = await fetch(`${buildApiUrl('/edit-image')}`, {
         method: 'POST',
-        body: formData,
-        // Don't set Content-Type header - let the browser set it with boundary
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrl: imageUrl,
+          prompt: prompt,
+        }),
       });
 
-      console.log('📡 API Response status:', apiResponse.status);
-
-      if (!apiResponse.ok) {
-        const errorText = await apiResponse.text();
-        console.error('❌ API Error:', errorText);
-        throw new Error(`API Error (${apiResponse.status}): ${errorText}`);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Edit failed (${response.status}): ${errorText}`);
       }
 
-      const result = await apiResponse.json();
+      const result = await response.json();
 
       if (result.success && result.editedImageData) {
         // Convert base64 to data URI
@@ -339,6 +317,10 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     );
   };
 
+  const pollVideoStatus = async (predictionId: string): Promise<string> => {
+    return await ApiService.pollVideoUntilComplete(predictionId);
+  };
+
   const generateVideo = async (videoType: string, prompt: string) => {
     if (!currentImage) return;
 
@@ -350,80 +332,32 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('📝 Prompt:', prompt);
       console.log('🖼️ Image URI:', currentImage.uri.substring(0, 100) + '...');
 
-      // Convert image to data URL if it's a local file URI
+      // First, upload the image to R2 if it's not already there
       let imageUrl = currentImage.uri;
       
-      if (!currentImage.uri.startsWith('data:') && !currentImage.uri.startsWith('http')) {
-        console.log('🔄 Converting local file URI to data URL...');
-        
-        try {
-          const response = await fetch(currentImage.uri);
-          if (!response.ok) {
-            throw new Error(`Failed to fetch image: ${response.status}`);
-          }
-          
-          const blob = await response.blob();
-          console.log('📦 Image blob size:', blob.size, 'bytes, type:', blob.type);
-          
-          if (blob.size === 0) {
-            throw new Error('Image file is empty or could not be loaded');
-          }
-          
-          // Convert blob to data URL using FileReader (React Native compatible)
-          const base64 = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = reader.result as string;
-              // Extract base64 part from data URL
-              const base64Data = result.split(',')[1];
-              resolve(base64Data);
-            };
-            reader.onerror = () => reject(new Error('Failed to read blob'));
-            reader.readAsDataURL(blob);
-          });
-          
-          const mimeType = blob.type || 'image/jpeg';
-          imageUrl = `data:${mimeType};base64,${base64}`;
-          
-          console.log('✅ Converted to data URL, length:', imageUrl.length);
-        } catch (conversionError) {
-          console.error('❌ Failed to convert image:', conversionError);
-          throw new Error('Failed to prepare image for video generation');
-        }
+      if (!currentImage.uri.startsWith('http')) {
+        console.log('📡 Uploading image to R2 first...');
+        imageUrl = await uploadImageToR2(currentImage.uri);
       }
+
+      console.log('🎬 Starting video generation with R2 image URL...');
 
       // Call the video generation API
-      const response = await fetch(`${API_BASE_URL}/generate-video`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          imageUrl: imageUrl,
-          prompt: prompt,
-          videoType: videoType,
-          originalPrompt: currentImage.prompt || 'Original image'
-        }),
-      });
-
-      console.log('📡 Video API Response status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ Video API Error:', errorText);
-        throw new Error(`Video API Error (${response.status}): ${errorText}`);
-      }
-
-      const result = await response.json();
+      const result = await ApiService.startVideoGeneration(imageUrl);
       console.log('📋 Video API Result received');
 
-      if (result.success && result.videoUrl) {
+      if (result.success && result.predictionId) {
+        console.log('✅ Video generation started, prediction ID:', result.predictionId);
+        
+        // Poll for the video result
+        const videoUrl = await pollVideoStatus(result.predictionId);
+        
         console.log('✅ Video generation completed successfully');
-        console.log('🎥 Video URL length:', result.videoUrl.length);
+        console.log('🎥 Video URL:', videoUrl);
         
         // Add the video to the carousel
         const newVideoVersion: ImageVersion = {
-          uri: result.videoUrl,
+          uri: videoUrl,
           prompt: `${videoType}: ${prompt}`,
           timestamp: new Date(),
           isOriginal: false,
@@ -436,11 +370,11 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           setCurrentImageIndex(newVersions.length - 1); // Move to the new video
           return newVersions;
         });
-        onImageSelected?.(result.videoUrl);
+        onImageSelected?.(videoUrl);
         
         console.log('✅ Video added to carousel');
       } else {
-        throw new Error(result.error || result.details || 'Failed to generate video');
+        throw new Error(result.error || 'Failed to start video generation');
       }
 
     } catch (error) {
