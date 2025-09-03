@@ -32,6 +32,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
@@ -43,14 +44,21 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
   // Effect to scroll to the current image when index changes
   useEffect(() => {
-    if (scrollViewRef.current && imageVersions.length > 0) {
+    if (scrollViewRef.current && imageVersions.length > 0 && currentImageIndex >= 0 && !isUserScrolling) {
       const screenWidth = Dimensions.get('window').width;
-      scrollViewRef.current.scrollTo({
-        x: currentImageIndex * screenWidth,
-        animated: true,
-      });
+      const targetX = currentImageIndex * screenWidth;
+      
+      // Use a shorter delay and more reliable timing
+      const scrollTimeout = setTimeout(() => {
+        scrollViewRef.current?.scrollTo({
+          x: targetX,
+          animated: true,
+        });
+      }, 150);
+
+      return () => clearTimeout(scrollTimeout);
     }
-  }, [currentImageIndex]);
+  }, [currentImageIndex, isUserScrolling]);
 
   const requestPermissions = async () => {
     try {
@@ -241,7 +249,10 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         
         setImageVersions(prev => {
           const newVersions = [...prev, newVersion];
-          setCurrentImageIndex(newVersions.length - 1); // Move to the new image (last index)
+          // Delay the index update to avoid conflicts with useEffect
+          requestAnimationFrame(() => {
+            setCurrentImageIndex(newVersions.length - 1);
+          });
           return newVersions;
         });
         onImageSelected?.(editedImageUri);
@@ -367,7 +378,10 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         
         setImageVersions(prev => {
           const newVersions = [...prev, newVideoVersion];
-          setCurrentImageIndex(newVersions.length - 1); // Move to the new video
+          // Delay the index update to avoid conflicts with useEffect
+          requestAnimationFrame(() => {
+            setCurrentImageIndex(newVersions.length - 1);
+          });
           return newVersions;
         });
         onImageSelected?.(videoUrl);
@@ -529,6 +543,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               style={styles.fullScreenCarousel}
+              onScrollBeginDrag={() => {
+                setIsUserScrolling(true);
+              }}
               onScroll={(event) => {
                 const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
                 if (newIndex !== currentImageIndex && newIndex >= 0 && newIndex < imageVersions.length) {
@@ -541,10 +558,14 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 if (newIndex !== currentImageIndex) {
                   setCurrentImageIndex(newIndex);
                 }
+                setIsUserScrolling(false);
               }}
             >
               {imageVersions.map((version, index) => (
-                <View key={index} style={[styles.fullScreenSlide, { backgroundColor }]}>
+                <View 
+                  key={index} 
+                  style={[styles.fullScreenSlide, { backgroundColor }]}
+                >
                   {version.isVideo ? (
                     <Video
                       source={{ uri: version.uri }}

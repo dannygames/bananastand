@@ -132,15 +132,49 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
 
   const handleFeatureTryPress = (featureId: string) => {
-    router.push('/(tabs)/create');
+    // Find the feature data
+    const featureData = showcaseFeatures.find(feature => feature.id === featureId);
+    
+    if (featureData) {
+      // Navigate to create tab with feature data
+      router.push({
+        pathname: '/(tabs)/create',
+        params: {
+          featureId: featureData.id,
+          featureTitle: featureData.title,
+          featureSubtitle: featureData.subtitle,
+          featureThumbnail: featureData.imageUri,
+          featureVideoUri: featureData.videoUri || '',
+          isFeature: 'true'
+        }
+      });
+    } else {
+      // Fallback to just navigate to create tab
+      router.push('/(tabs)/create');
+    }
   };
 
   const handleVideoPress = (videoId: string) => {
-    Alert.alert(
-      'Video Preview',
-      `This would play the ${videoId} video preview.`,
-      [{ text: 'OK', style: 'default' }]
-    );
+    // Find the video data from all sections
+    const allVideos = [...duoVideos, ...coupleVideos, ...digitalForensicsVideos];
+    const videoData = allVideos.find(video => video.id === videoId);
+    
+    if (videoData) {
+      // Navigate to create tab with video data
+      router.push({
+        pathname: '/(tabs)/create',
+        params: {
+          videoId: videoData.id,
+          videoTitle: videoData.title,
+          videoThumbnail: videoData.thumbnailUri,
+          videoUri: videoData.videoUri || '',
+          participants: JSON.stringify((videoData as any).participants || [])
+        }
+      });
+    } else {
+      // Fallback to just navigate to create tab
+      router.push('/(tabs)/create');
+    }
   };
 
   const handleSeeAllPress = (section: string) => {
