@@ -72,6 +72,18 @@ export function VideoPreviewCard({
           </>
         )}
         
+        {/* Title overlay */}
+        <View style={styles.titleOverlay}>
+          <Image 
+            source={require('@/assets/images/black-gradient.png')}
+            style={styles.gradientBackground}
+            contentFit="fill"
+          />
+          <ThemedText style={styles.title} numberOfLines={2}>
+            {title}
+          </ThemedText>
+        </View>
+
         {/* Participants indicators */}
         {participants.length > 0 && (
           <View style={styles.participantsContainer}>
@@ -92,19 +104,13 @@ export function VideoPreviewCard({
           </View>
         )}
       </View>
-      
-      <View style={styles.titleContainer}>
-        <ThemedText style={styles.title} numberOfLines={2}>
-          {title}
-        </ThemedText>
-      </View>
     </TouchableOpacity>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 16,
+    borderRadius: 24,
     overflow: 'hidden',
     elevation: 4,
     shadowColor: '#000',
@@ -174,14 +180,26 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#ffffff',
   },
-  titleContainer: {
-    padding: 12,
-    minHeight: 44,
+  titleOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  gradientBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   title: {
     fontSize: 14,
     fontWeight: '600',
     lineHeight: 18,
+    color: '#ffffff',
   },
 });

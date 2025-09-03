@@ -42,30 +42,30 @@ const duoVideos = [
     title: 'Romantic Lift',
     thumbnailUri: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1494790108755-2616b612b2bc?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1494790108755-2616b612b2bc?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop'
+    // ],
   },
   {
     id: 'future-baby',
     title: 'Future Baby Girl',
     thumbnailUri: 'https://images.unsplash.com/photo-1544717297-fa95b6ee9643?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop'
+    // ],
   },
   {
     id: 'dream-dance',
     title: 'Dream Dance',
     thumbnailUri: 'https://images.unsplash.com/photo-1547036967-23d11aacaee0?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1507152832244-10d45c7eda57?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1507152832244-10d45c7eda57?w=50&h=50&fit=crop'
+    // ],
   },
 ];
 
@@ -75,30 +75,30 @@ const coupleVideos = [
     title: 'Sunset Walk',
     thumbnailUri: 'https://images.unsplash.com/photo-1516589178581-6cd7833ae3b2?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1494790108755-2616b612b2bc?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1494790108755-2616b612b2bc?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop'
+    // ],
   },
   {
     id: 'coffee-date',
     title: 'Coffee Date',
     thumbnailUri: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop'
+    // ],
   },
   {
     id: 'adventure-hike',
     title: 'Adventure Hike',
     thumbnailUri: 'https://images.unsplash.com/photo-1551632811-561732d1e306?w=200&h=300&fit=crop',
     videoUri: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4',
-    participants: [
-      'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=50&h=50&fit=crop',
-      'https://images.unsplash.com/photo-1507152832244-10d45c7eda57?w=50&h=50&fit=crop'
-    ],
+    // participants: [
+    //   'https://images.unsplash.com/photo-1554151228-14d9def656e4?w=50&h=50&fit=crop',
+    //   'https://images.unsplash.com/photo-1507152832244-10d45c7eda57?w=50&h=50&fit=crop'
+    // ],
   },
 ];
 
@@ -157,36 +157,14 @@ export default function HomeScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <ScrollView 
-          style={styles.scrollView}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 100, 120) }]}
-          showsVerticalScrollIndicator={false}
-          bounces={true}
-        >
-          {/* Header */}
-          {/* <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.proSection}>
-                <View style={[styles.proBadge, { backgroundColor: tintColor }]}>
-                  <ThemedText style={[styles.proText, { color: backgroundColor }]}>PRO</ThemedText>
-                </View>
-                <TouchableOpacity style={styles.referralButton}>
-                  <Ionicons name="gift" size={16} color={textColor} />
-                  <ThemedText style={styles.referralText}>Referral</ThemedText>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.coinSection}>
-                <ThemedText style={styles.coinCount}>0</ThemedText>
-                <View style={styles.coinIcon}>
-                  <Ionicons name="diamond" size={16} color="#FFD700" />
-                </View>
-              </View>
-            </View>
-          </View> */}
-
-          {/* Feature Showcase Carousel */}
-          <View style={styles.showcaseSection}>
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Math.max(insets.bottom + 100, 120) }]}
+        showsVerticalScrollIndicator={false}
+        bounces={true}
+      >
+        {/* Feature Showcase Carousel - Full Screen */}
+        <View style={styles.showcaseSection}>
             <ScrollView
               ref={showcaseScrollRef}
               horizontal
@@ -237,8 +215,10 @@ export default function HomeScreen() {
                 />
               ))}
             </View>
-          </View>
+        </View>
 
+        {/* Content with Safe Area */}
+        <SafeAreaView style={styles.contentSafeArea} edges={['left', 'right']}>
           {/* Video Sections */}
           <VideoSection
             title="Duo Videos"
@@ -278,8 +258,8 @@ export default function HomeScreen() {
               </ThemedText>
             </TouchableOpacity>
           </View>
-        </ScrollView>
-      </SafeAreaView>
+        </SafeAreaView>
+      </ScrollView>
     </ThemedView>
   );
 }
@@ -288,7 +268,7 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  safeArea: {
+  contentSafeArea: {
     flex: 1,
   },
   scrollView: {
@@ -360,7 +340,6 @@ const styles = StyleSheet.create({
   showcaseSlide: {
     width: screenWidth,
     alignItems: 'center',
-    paddingHorizontal: 20,
   },
   dotsContainer: {
     flexDirection: 'row',

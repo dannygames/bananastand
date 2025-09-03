@@ -68,7 +68,8 @@
           "savePhotosPermission": "Allow this app to save photos and videos to your photo library.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true

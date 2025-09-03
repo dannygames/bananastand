@@ -16,7 +16,7 @@ interface ShowcaseCardProps {
 }
 
 const { width } = Dimensions.get('window');
-const cardWidth = width * 0.85;
+const cardWidth = width;
 
 export function ShowcaseCard({ title, subtitle, imageUri, videoUri, onPress, style, autoplay = true }: ShowcaseCardProps) {
   const backgroundColor = useThemeColor({}, 'background');
@@ -75,17 +75,8 @@ const styles = StyleSheet.create({
   card: {
     width: cardWidth,
     height: 320,
-    borderRadius: 20,
-    marginHorizontal: 8,
+    borderRadius: 0,
     overflow: 'hidden',
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
   },
   imageContainer: {
     flex: 1,
