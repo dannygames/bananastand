@@ -225,7 +225,9 @@ export default function HomeScreen() {
                     {
                       backgroundColor: index === currentFeatureIndex 
                         ? tintColor 
-                        : `${tintColor}40`, // 25% opacity using hex
+                        : backgroundColor === '#000000' 
+                          ? 'rgba(255, 255, 255, 0.4)'  // Light dots for dark mode
+                          : 'rgba(0, 0, 0, 0.3)',       // Dark dots for light mode
                     },
                   ]}
                   onPress={() => {
