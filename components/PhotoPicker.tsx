@@ -529,6 +529,13 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               pagingEnabled
               showsHorizontalScrollIndicator={false}
               style={styles.fullScreenCarousel}
+              onScroll={(event) => {
+                const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
+                if (newIndex !== currentImageIndex && newIndex >= 0 && newIndex < imageVersions.length) {
+                  setCurrentImageIndex(newIndex);
+                }
+              }}
+              scrollEventThrottle={16}
               onMomentumScrollEnd={(event) => {
                 const newIndex = Math.round(event.nativeEvent.contentOffset.x / Dimensions.get('window').width);
                 if (newIndex !== currentImageIndex) {

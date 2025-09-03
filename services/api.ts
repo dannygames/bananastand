@@ -14,7 +14,7 @@ export const API_CONFIG = {
   
   // Current API URL based on environment
   get BASE_URL() {
-    return isDevelopment ? this.DEVELOPMENT_URL : this.PRODUCTION_URL;
+    return this.PRODUCTION_URL; //isDevelopment ? this.DEVELOPMENT_URL : this.PRODUCTION_URL;
   }
 };
 
