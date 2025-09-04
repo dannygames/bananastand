@@ -2,9 +2,10 @@ import { ShowcaseCard } from '@/components/ShowcaseCard';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
 import { VideoSection } from '@/components/VideoSection';
+import { Config } from '@/constants/Config';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { router } from 'expo-router';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Alert, Dimensions, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -130,6 +131,13 @@ export default function HomeScreen() {
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
   const insets = useSafeAreaInsets();
+
+  // Redirect to create tab if home tab is disabled
+  useEffect(() => {
+    if (!Config.features.homeTabEnabled) {
+      router.replace('/(tabs)/create');
+    }
+  }, []);
 
   const handleFeatureTryPress = (featureId: string) => {
     // Find the feature data

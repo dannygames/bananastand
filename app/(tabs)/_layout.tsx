@@ -6,10 +6,19 @@ import { HapticTab } from '@/components/HapticTab';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
+import { Config } from '@/constants/Config';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+
+  // If home tab is disabled, redirect to create tab
+  React.useEffect(() => {
+    if (!Config.features.homeTabEnabled) {
+      // This will redirect to the create tab when home is disabled
+      // The redirect will happen automatically when the index route is accessed
+    }
+  }, []);
 
   return (
     <Tabs
@@ -26,13 +35,24 @@ export default function TabLayout() {
           default: {},
         }),
       }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
-        }}
-      />
+      {Config.features.homeTabEnabled ? (
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          }}
+        />
+      ) : (
+        <Tabs.Screen
+          name="index"
+          options={{
+            title: 'Home',
+            tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+            href: null, // This hides the tab completely
+          }}
+        />
+      )}
       <Tabs.Screen
         name="create"
         options={{

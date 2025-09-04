@@ -808,12 +808,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     // backgroundColor will be set dynamically based on theme
     paddingHorizontal: 40,
-    paddingTop: 60, // Add top padding to prevent text cutoff
+    paddingTop: 0, // Reduced top padding for better centering
     paddingBottom: 40,
   },
   emptyStateContent: {
     alignItems: 'center',
+    justifyContent: 'center',
     maxWidth: 300,
+    flex: 1,
   },
   cameraIcon: {
     width: 100,
