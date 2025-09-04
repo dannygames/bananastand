@@ -35,7 +35,7 @@ export function Credits() {
 
   return (
     <>
-      {/* Credits Button - Fixed in top right */}
+      {/* Credits Button - Fixed in top left */}
       <View style={[styles.creditsButton, { top: insets.top + 10 }]}>
         <TouchableOpacity
           onPress={openCredits}
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   creditsButton: {
     position: 'absolute',
     top: 50,
-    right: 20,
+    left: 20,
     zIndex: 1000,
   },
   buttonContainer: {
