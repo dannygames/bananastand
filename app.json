@@ -16,6 +16,11 @@
         "NSPhotoLibraryUsageDescription": "This app needs access to photo library to select images.",
         "NSPhotoLibraryAddUsageDescription": "This app needs access to save photos and videos to your photo library.",
         "NSMicrophoneUsageDescription": "This app needs access to microphone for video recording."
+      },
+      "entitlements": {
+        "com.apple.developer.applesignin": [
+          "Default"
+        ]
       }
     },
     "android": {
@@ -25,11 +30,6 @@
       },
       "edgeToEdgeEnabled": true,
       "permissions": [
-        "android.permission.CAMERA",
-        "android.permission.RECORD_AUDIO",
-        "android.permission.READ_EXTERNAL_STORAGE",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.ACCESS_MEDIA_LOCATION",
         "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
@@ -69,10 +69,22 @@
           "isAccessMediaLocationEnabled": true
         }
       ],
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.847043325640-afio933snemh8egu0deevm4grmi7ehtc"
+        }
+      ],
       "expo-video"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "4a4235f2-8cd6-486b-a1ea-7a6f06894f98"
+      }
     }
   }
 }

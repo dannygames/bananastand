@@ -341,6 +341,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('🎬 Starting video generation...');
       console.log('📝 Video Type:', videoType);
       console.log('📝 Prompt:', prompt);
+      console.log('📝 Prompt length:', prompt?.length || 0);
+      console.log('📝 Prompt type:', typeof prompt);
       console.log('🖼️ Image URI:', currentImage.uri.substring(0, 100) + '...');
 
       // First, upload the image to R2 if it's not already there
@@ -354,7 +356,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('🎬 Starting video generation with R2 image URL...');
 
       // Call the video generation API
-      const result = await ApiService.startVideoGeneration(imageUrl);
+      const result = await ApiService.startVideoGeneration(imageUrl, prompt);
       console.log('📋 Video API Result received');
 
       if (result.success && result.predictionId) {
@@ -369,7 +371,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         // Add the video to the carousel
         const newVideoVersion: ImageVersion = {
           uri: videoUrl,
-          prompt: `${videoType}: ${prompt}`,
+          prompt: prompt,
           timestamp: new Date(),
           isOriginal: false,
           isVideo: true,

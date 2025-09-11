@@ -99,15 +99,22 @@ export class ApiService {
     }
   }
 
-  static async startVideoGeneration(imageUrl: string): Promise<VideoGenerationResponse> {
+  static async startVideoGeneration(imageUrl: string, prompt: string): Promise<VideoGenerationResponse> {
+    const requestBody = {
+      imageUrl: imageUrl,
+      prompt: prompt,
+    };
+    
+    console.log('🚀 API Request Body:', JSON.stringify(requestBody, null, 2));
+    console.log('📝 Prompt in API:', prompt);
+    console.log('📝 Prompt length in API:', prompt?.length || 0);
+    
     const response = await fetch(buildApiUrl(ENDPOINTS.GENERATE_VIDEO), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        imageUrl: imageUrl,
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

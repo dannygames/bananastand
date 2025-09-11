@@ -1,4 +1,4 @@
-import { Tabs } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import React from 'react';
 import { Platform } from 'react-native';
 
@@ -7,10 +7,20 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { Config } from '@/constants/Config';
+import { useAuth } from '@/contexts/AuthContext';
 import { useColorScheme } from '@/hooks/useColorScheme';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { user } = useAuth();
+  const router = useRouter();
+
+  // Redirect to sign-in if not authenticated
+  React.useEffect(() => {
+    if (!user) {
+      router.replace('/auth/signin');
+    }
+  }, [user, router]);
 
   // If home tab is disabled, redirect to create tab
   React.useEffect(() => {

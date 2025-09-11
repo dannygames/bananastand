@@ -1,15 +1,36 @@
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { useAuth } from '@/contexts/AuthContext';
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Feather, Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Alert, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HelpScreen() {
   const tintColor = useThemeColor({}, 'tint');
   const backgroundColor = useThemeColor({}, 'background');
   const insets = useSafeAreaInsets();
+  const { signOut, user } = useAuth();
+
+  const handleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            router.replace('/auth/signin');
+          },
+        },
+      ]
+    );
+  };
 
   return (
     <ThemedView style={styles.container}>
@@ -27,6 +48,28 @@ export default function HelpScreen() {
           <ThemedText style={styles.subtitle}>
             Learn how to use Bananastand's AI-powered photo editing and video generation
           </ThemedText>
+        </View>
+
+        {/* Account Section */}
+        <View style={styles.accountSection}>
+          <View style={styles.accountInfo}>
+            <Ionicons name="person-circle" size={24} color={tintColor} />
+            <View style={styles.accountText}>
+              <ThemedText style={styles.accountEmail}>
+                {user?.email || 'User'}
+              </ThemedText>
+              <ThemedText style={styles.accountLabel}>Signed in</ThemedText>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.signOutButton, { backgroundColor: tintColor }]}
+            onPress={handleSignOut}
+          >
+            <Ionicons name="log-out" size={16} color={backgroundColor} />
+            <ThemedText style={[styles.signOutText, { color: backgroundColor }]}>
+              Sign Out
+            </ThemedText>
+          </TouchableOpacity>
         </View>
 
         {/* Step 1 */}
@@ -200,6 +243,45 @@ export default function HelpScreen() {
 }
 
 const styles = StyleSheet.create({
+  // Account Section Styles
+  accountSection: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 24,
+  },
+  accountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  accountText: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  accountEmail: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  accountLabel: {
+    fontSize: 14,
+    opacity: 0.7,
+  },
+  signOutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    gap: 6,
+  },
+  signOutText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
   container: {
     flex: 1,
     // backgroundColor will be set by ThemedView based on theme

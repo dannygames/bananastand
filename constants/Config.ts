@@ -7,6 +7,8 @@ export const Config = {
   features: {
     // Set to false to disable the Home tab
     homeTabEnabled: false,
+    // Set to true to enable authentication bypass for development
+    bypassAuthEnabled: true,
   },
   
   // App settings
