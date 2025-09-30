@@ -20,6 +20,8 @@ interface ImageVersion {
   isOriginal?: boolean;
   isVideo?: boolean;
   videoType?: string;
+  isMultiImageEdit?: boolean;
+  sourceImages?: string[]; // Store source image URIs for multi-image edits
 }
 
 interface PhotoPickerProps {
@@ -33,6 +35,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const [selectedSourceImages, setSelectedSourceImages] = useState<string[]>([]);
+  const [isMultiImageMode, setIsMultiImageMode] = useState(false);
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
@@ -90,16 +94,20 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
   const showImagePickerOptions = () => {
     Alert.alert(
-      'Select Photo',
-      'Choose how you want to select a photo',
+      'Select Photos',
+      'Choose how you want to add photos',
       [
         {
-          text: 'Camera',
+          text: 'Single Photo (Camera)',
           onPress: takePhoto,
         },
         {
-          text: 'Photo Library',
+          text: 'Single Photo (Library)',
           onPress: pickImage,
+        },
+        {
+          text: 'Multiple Photos',
+          onPress: pickMultipleImages,
         },
         {
           text: 'Cancel',
@@ -128,6 +136,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         };
         setImageVersions([newVersion]);
         setCurrentImageIndex(0);
+        setIsMultiImageMode(false);
+        setSelectedSourceImages([]);
         onImageSelected?.(imageUri);
       }
     } catch (error) {
@@ -155,6 +165,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         };
         setImageVersions([newVersion]);
         setCurrentImageIndex(0);
+        setIsMultiImageMode(false);
+        setSelectedSourceImages([]);
         onImageSelected?.(imageUri);
       }
     } catch (error) {
@@ -163,12 +175,111 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     }
   };
 
+  const pickMultipleImages = async () => {
+    try {
+      const hasPermission = await requestPermissions();
+      if (!hasPermission) return;
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.8,
+        allowsMultipleSelection: true,
+        selectionLimit: 5, // Limit to 5 images for performance
+      });
+
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        console.log('📸 Selected multiple images:', result.assets.length);
+        
+        const imageUris = result.assets.map(asset => asset.uri);
+        setSelectedSourceImages(imageUris);
+        setIsMultiImageMode(true);
+        
+        // Add all images to the carousel as source images
+        const newVersions: ImageVersion[] = result.assets.map((asset, index) => ({
+          uri: asset.uri,
+          timestamp: new Date(),
+          isOriginal: true,
+        }));
+        
+        setImageVersions(newVersions);
+        setCurrentImageIndex(0);
+        onImageSelected?.(imageUris[0]);
+        
+        // Show prompt for multi-image editing
+        setTimeout(() => {
+          Alert.alert(
+            'Multiple Images Selected',
+            `You've selected ${imageUris.length} images. You can now edit them individually or combine them using the Edit button.`,
+            [{ text: 'Got it!', style: 'default' }]
+          );
+        }, 500);
+      }
+    } catch (error) {
+      console.error('Error picking multiple images:', error);
+      Alert.alert('Error', 'Failed to select multiple images. Please try again.');
+    }
+  };
+
   const handleEditPhoto = () => {
     if (isEditing) return; // Prevent multiple simultaneous edits
 
+    if (isMultiImageMode && selectedSourceImages.length > 1) {
+      // Multi-image editing
+      Alert.alert(
+        'Edit Multiple Images',
+        `You have ${selectedSourceImages.length} images selected. Choose how to edit:`,
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel',
+          },
+          {
+            text: 'Edit Current Image Only',
+            onPress: () => showModelSelector(false),
+          },
+          {
+            text: 'Combine All Images',
+            onPress: () => showModelSelector(true),
+          },
+        ]
+      );
+    } else {
+      // Single image editing
+      showModelSelector(false);
+    }
+  };
+
+  const showModelSelector = (combineImages: boolean) => {
+    Alert.alert(
+      'Choose AI Model',
+      'Select which AI model to use for editing:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Qwen',
+          onPress: () => showEditPrompt(combineImages, 'qwen'),
+        },
+        {
+          text: 'Nano Banana',
+          onPress: () => showEditPrompt(combineImages, 'nano'),
+        },
+      ]
+    );
+  };
+
+  const showEditPrompt = (combineImages: boolean, model: 'qwen' | 'nano') => {
+    const modelName = model === 'qwen' ? 'Qwen' : 'Nano Banana';
+    const promptTitle = combineImages ? `Combine Images (${modelName})` : `Edit Photo (${modelName})`;
+    const promptMessage = combineImages 
+      ? `Describe how you want to combine all ${selectedSourceImages.length} images:`
+      : 'Describe the edit you want to make to this photo:';
+
     Alert.prompt(
-      'Edit Photo',
-      'Describe the edit you want to make to this photo:',
+      promptTitle,
+      promptMessage,
       [
         {
           text: 'Cancel',
@@ -177,8 +288,12 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         {
           text: 'Apply',
           onPress: async (editDescription) => {
-            if (editDescription && editDescription.trim() && currentImage) {
-              await processImageEdit(editDescription.trim());
+            if (editDescription && editDescription.trim()) {
+              if (combineImages) {
+                await processMultiImageEdit(editDescription.trim(), model);
+              } else {
+                await processImageEdit(editDescription.trim(), model);
+              }
             } else {
               Alert.alert('No Description', 'Please provide a description for the edit.');
             }
@@ -200,30 +315,40 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     return publicUrl;
   };
 
-  const processImageEdit = async (prompt: string) => {
-    if (!currentImage) return;
+  const processMultiImageEdit = async (prompt: string, model: 'qwen' | 'nano') => {
+    if (!selectedSourceImages.length) return;
 
     setIsEditing(true);
     
     try {
-      console.log('🎨 Starting image edit with prompt:', prompt);
-      console.log('📂 Image URI:', currentImage.uri.substring(0, 100) + '...');
+      console.log('🎨 Starting multi-image edit with prompt:', prompt);
+      console.log('🤖 Using model:', model);
+      console.log('📂 Number of source images:', selectedSourceImages.length);
       
-      // First, upload the current image to R2 if it's not already there
-      let imageUrl = currentImage.uri;
+      // Upload all source images to R2 if they're not already there
+      const imageUrls: string[] = [];
       
-      if (!currentImage.uri.startsWith('http')) {
-        imageUrl = await uploadImageToR2(currentImage.uri);
+      for (let i = 0; i < selectedSourceImages.length; i++) {
+        const imageUri = selectedSourceImages[i];
+        console.log(`📡 Processing image ${i + 1}/${selectedSourceImages.length}...`);
+        
+        if (imageUri.startsWith('http')) {
+          imageUrls.push(imageUri);
+        } else {
+          const uploadedUrl = await uploadImageToR2(imageUri);
+          imageUrls.push(uploadedUrl);
+        }
       }
       
-      // Call the edit-image API with the R2 URL
-      const response = await fetch(`${buildApiUrl('/edit-image')}`, {
+      // Call the appropriate API endpoint based on model
+      const endpoint = model === 'qwen' ? '/edit-image-qwen' : '/edit-image';
+      const response = await fetch(`${buildApiUrl(endpoint)}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          imageUrl: imageUrl,
+          imageUrls: imageUrls,
           prompt: prompt,
         }),
       });
@@ -235,32 +360,134 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
       const result = await response.json();
 
-      if (result.success && result.editedImageData) {
-        // Convert base64 to data URI
-        const editedImageUri = `data:image/jpeg;base64,${result.editedImageData}`;
-        
-        // Add the new edited version to the carousel
-        const newVersion: ImageVersion = {
-          uri: editedImageUri,
-          prompt: prompt,
-          timestamp: new Date(),
-          isOriginal: false
-        };
-        
-        setImageVersions(prev => {
-          const newVersions = [...prev, newVersion];
-          // Delay the index update to avoid conflicts with useEffect
-          requestAnimationFrame(() => {
-            setCurrentImageIndex(newVersions.length - 1);
-          });
-          return newVersions;
-        });
-        onImageSelected?.(editedImageUri);
-        
-        console.log('✅ Image edit completed successfully');
+      let editedImageUri: string;
+
+      if (model === 'qwen') {
+        // Handle Qwen API response: { success: true, editedImageData: { images: [...] } }
+        if (result.success && result.editedImageData?.images && result.editedImageData.images.length > 0) {
+          editedImageUri = result.editedImageData.images[0].url;
+        } else {
+          throw new Error('Invalid Qwen response format');
+        }
       } else {
-        throw new Error(result.error || result.details || 'Failed to edit image');
+        // Handle Nano Banana API response: { success: true, editedImageData: "base64..." }
+        if (result.success && result.editedImageData) {
+          editedImageUri = `data:image/jpeg;base64,${result.editedImageData}`;
+        } else {
+          throw new Error(result.error || result.details || 'Failed to edit images');
+        }
       }
+      
+      // Add the new edited version to the carousel
+      const newVersion: ImageVersion = {
+        uri: editedImageUri,
+        prompt: `${model === 'qwen' ? 'Qwen' : 'Nano Banana'}: ${prompt}`,
+        timestamp: new Date(),
+        isOriginal: false,
+        isMultiImageEdit: true,
+        sourceImages: selectedSourceImages
+      };
+      
+      setImageVersions(prev => {
+        const newVersions = [...prev, newVersion];
+        // Delay the index update to avoid conflicts with useEffect
+        requestAnimationFrame(() => {
+          setCurrentImageIndex(newVersions.length - 1);
+        });
+        return newVersions;
+      });
+      onImageSelected?.(editedImageUri);
+      
+      console.log('✅ Multi-image edit completed successfully');
+      
+    } catch (error) {
+      console.error('❌ Multi-image edit failed:', error);
+      
+      Alert.alert(
+        'Edit Failed',
+        `Sorry, we couldn't edit your images. ${error instanceof Error ? error.message : 'Please try again.'}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    } finally {
+      setIsEditing(false);
+    }
+  };
+
+  const processImageEdit = async (prompt: string, model: 'qwen' | 'nano') => {
+    if (!currentImage) return;
+
+    setIsEditing(true);
+    
+    try {
+      console.log('🎨 Starting image edit with prompt:', prompt);
+      console.log('🤖 Using model:', model);
+      console.log('📂 Image URI:', currentImage.uri.substring(0, 100) + '...');
+      
+      // First, upload the current image to R2 if it's not already there
+      let imageUrl = currentImage.uri;
+      
+      if (!currentImage.uri.startsWith('http')) {
+        imageUrl = await uploadImageToR2(currentImage.uri);
+      }
+      
+      // Call the appropriate API endpoint based on model
+      const endpoint = model === 'qwen' ? '/edit-image-qwen' : '/edit-image';
+      const response = await fetch(`${buildApiUrl(endpoint)}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          imageUrls: [imageUrl],
+          prompt: prompt,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Edit failed (${response.status}): ${errorText}`);
+      }
+
+      const result = await response.json();
+      console.log(`📊 ${model} edit result:`, result);
+
+      let editedImageUri: string;
+
+      if (model === 'qwen') {
+        // Handle Qwen API response: { success: true, editedImageData: { images: [...] } }
+        if (result.success && result.editedImageData?.images && result.editedImageData.images.length > 0) {
+          editedImageUri = result.editedImageData.images[0].url;
+        } else {
+          throw new Error('Invalid Qwen response format: missing editedImageData.images array or URL');
+        }
+      } else {
+        // Handle Nano Banana API response: { success: true, editedImageData: "base64..." }
+        if (result.success && result.editedImageData) {
+          editedImageUri = `data:image/jpeg;base64,${result.editedImageData}`;
+        } else {
+          throw new Error(result.error || result.details || 'Failed to edit image');
+        }
+      }
+      
+      // Add the new edited version to the carousel
+      const newVersion: ImageVersion = {
+        uri: editedImageUri,
+        prompt: `${model === 'qwen' ? 'Qwen' : 'Nano Banana'}: ${prompt}`,
+        timestamp: new Date(),
+        isOriginal: false
+      };
+      
+      setImageVersions(prev => {
+        const newVersions = [...prev, newVersion];
+        // Delay the index update to avoid conflicts with useEffect
+        requestAnimationFrame(() => {
+          setCurrentImageIndex(newVersions.length - 1);
+        });
+        return newVersions;
+      });
+      onImageSelected?.(editedImageUri);
+      
+      console.log('✅ Image edit completed successfully with URI:', editedImageUri.substring(0, 100) + '...');
       
     } catch (error) {
       console.error('❌ Image edit failed:', error);
@@ -664,13 +891,20 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
             {/* Media info */}
             <View style={styles.mediaInfo}>
               <ThemedText style={styles.mediaInfoText} numberOfLines={2}>
-                {currentImage?.isOriginal 
-                  ? 'Original' 
-                  : currentImage?.isVideo 
-                    ? currentImage.prompt 
-                    : currentImage?.prompt
+                {currentImage?.isMultiImageEdit 
+                  ? `Combined from ${currentImage.sourceImages?.length || 0} images: ${currentImage.prompt}`
+                  : currentImage?.isOriginal 
+                    ? (isMultiImageMode ? `Original (${currentImageIndex + 1}/${imageVersions.length})` : 'Original')
+                    : currentImage?.isVideo 
+                      ? currentImage.prompt 
+                      : currentImage?.prompt
                 }
               </ThemedText>
+              {isMultiImageMode && !currentImage?.isMultiImageEdit && (
+                <ThemedText style={styles.multiImageHint}>
+                  {selectedSourceImages.length} images selected • Swipe to browse • Tap Edit to combine
+                </ThemedText>
+              )}
               {/* <ThemedText style={styles.mediaTimestamp}>
                 {currentImage?.timestamp.toLocaleString()}
               </ThemedText> */}
@@ -726,7 +960,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                     )}
                   </View>
                   <Text style={[styles.actionButtonLabel, { color: textColor }]}>
-                    {isEditing ? 'Editing' : 'Edit'}
+                    {isEditing ? 'Editing' : isMultiImageMode && selectedSourceImages.length > 1 ? 'Combine' : 'Edit'}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -958,6 +1192,13 @@ const styles = StyleSheet.create({
     // color will be set by ThemedText based on theme
     fontSize: 13,
     opacity: 0.7,
+  },
+  multiImageHint: {
+    // color will be set by ThemedText based on theme
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+    fontStyle: 'italic',
   },
   mediaControlsRow: {
     flexDirection: 'row',
