@@ -572,15 +572,37 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.log('📝 Prompt type:', typeof prompt);
       console.log('🖼️ Image URI:', currentImage.uri.substring(0, 100) + '...');
 
-      // First, upload the image to R2 if it's not already there
+      // First, ensure the image is uploaded to R2
       let imageUrl = currentImage.uri;
       
-      if (!currentImage.uri.startsWith('http')) {
-        console.log('📡 Uploading image to R2 first...');
-        imageUrl = await uploadImageToR2(currentImage.uri);
+      // Check if it's already on R2 (not just any http URL)
+      const isR2Url = currentImage.uri.includes('r2.dev') || currentImage.uri.includes('r2.cloudflarestorage.com');
+      
+      if (!isR2Url) {
+        console.log('📡 Image is not on R2, uploading to R2 first...');
+        
+        if (currentImage.uri.startsWith('http')) {
+          // It's an external URL (like fal.media), download and re-upload
+          console.log('📥 Downloading external image to re-upload to R2...');
+          const fileName = `temp_${Date.now()}.jpg`;
+          const tempUri = `${FileSystem.documentDirectory}${fileName}`;
+          
+          const downloadResult = await FileSystem.downloadAsync(currentImage.uri, tempUri);
+          imageUrl = await uploadImageToR2(downloadResult.uri);
+          
+          // Clean up temp file
+          try {
+            await FileSystem.deleteAsync(tempUri);
+          } catch (e) {
+            console.log('⚠️ Could not delete temp file');
+          }
+        } else {
+          // It's a local URI (data: or file:), upload directly
+          imageUrl = await uploadImageToR2(currentImage.uri);
+        }
       }
 
-      console.log('🎬 Starting video generation with R2 image URL...');
+      console.log('🎬 Starting video generation with R2 image URL:', imageUrl.substring(0, 100) + '...');
 
       // Call the video generation API
       const result = await ApiService.startVideoGeneration(imageUrl, prompt);
