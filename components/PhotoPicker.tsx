@@ -1,12 +1,12 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { ResizeMode, Video } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as MediaLibrary from 'expo-media-library';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ThemedText } from './ThemedText';
 
@@ -24,9 +24,94 @@ interface ImageVersion {
   sourceImages?: string[]; // Store source image URIs for multi-image edits
 }
 
+interface Effect {
+  id: string;
+  name: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  prompt: string;
+  model: 'qwen' | 'nano-banana';
+}
+
+interface CustomEffect extends Effect {
+  isCustom: true;
+}
+
 interface PhotoPickerProps {
   onImageSelected?: (uri: string) => void;
 }
+
+// Predefined effects for each category
+const FUNNY_EFFECTS: Effect[] = [
+  { 
+    id: 'funny-face', 
+    name: 'Funny Face', 
+    icon: 'happy-outline', 
+    prompt: 'Transform face into a funny cartoon character with exaggerated features', 
+    model: 'qwen' 
+  },
+  { 
+    id: 'cartoon-style', 
+    name: 'Cartoon Style', 
+    icon: 'color-wand-outline', 
+    prompt: 'Convert image to cartoon style with bold colors and outlines', 
+    model: 'qwen' 
+  },
+  { 
+    id: 'anime-style', 
+    name: 'Anime Style', 
+    icon: 'star-outline', 
+    prompt: 'Transform into anime art style with expressive eyes and features', 
+    model: 'nano-banana' 
+  },
+];
+
+const REPLACE_EFFECTS: Effect[] = [
+  { 
+    id: 'object-replace', 
+    name: 'Object Replacement', 
+    icon: 'swap-horizontal-outline', 
+    prompt: 'Replace selected object with another item while maintaining scene composition', 
+    model: 'qwen' 
+  },
+  { 
+    id: 'background-change', 
+    name: 'Background Change', 
+    icon: 'person-outline', 
+    prompt: 'Change the background while keeping the subject intact', 
+    model: 'nano-banana' 
+  },
+  { 
+    id: 'style-transfer', 
+    name: 'Style Transfer', 
+    icon: 'brush-outline', 
+    prompt: 'Apply artistic style from another image', 
+    model: 'qwen' 
+  },
+];
+
+const ENVIRONMENT_EFFECTS: Effect[] = [
+  { 
+    id: 'weather-change', 
+    name: 'Weather Change', 
+    icon: 'sunny-outline', 
+    prompt: 'Change weather conditions - make it sunny, rainy, snowy, or foggy', 
+    model: 'qwen' 
+  },
+  { 
+    id: 'time-of-day', 
+    name: 'Time of Day', 
+    icon: 'time-outline', 
+    prompt: 'Change lighting to different time of day - dawn, day, dusk, or night', 
+    model: 'nano-banana' 
+  },
+  { 
+    id: 'season-change', 
+    name: 'Season Change', 
+    icon: 'leaf-outline', 
+    prompt: 'Transform scene to different season - spring, summer, fall, or winter', 
+    model: 'qwen' 
+  },
+];
 
 export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
@@ -37,6 +122,13 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [selectedSourceImages, setSelectedSourceImages] = useState<string[]>([]);
   const [isMultiImageMode, setIsMultiImageMode] = useState(false);
+  const [selectedTab, setSelectedTab] = useState<'Funny' | 'Replace' | 'Environment' | 'Custom'>('Funny');
+  const [isEffectsExpanded, setIsEffectsExpanded] = useState(false);
+  const [customEffects, setCustomEffects] = useState<CustomEffect[]>([]);
+  const [showCustomEffectModal, setShowCustomEffectModal] = useState(false);
+  const [newEffectName, setNewEffectName] = useState('');
+  const [newEffectPrompt, setNewEffectPrompt] = useState('');
+  const [newEffectModel, setNewEffectModel] = useState<'qwen' | 'nano-banana'>('qwen');
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
@@ -94,20 +186,16 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
   const showImagePickerOptions = () => {
     Alert.alert(
-      'Select Photos',
-      'Choose how you want to add photos',
+      'Select Photo',
+      'Choose how you want to add a photo',
       [
         {
-          text: 'Single Photo (Camera)',
+          text: 'Camera',
           onPress: takePhoto,
         },
         {
-          text: 'Single Photo (Library)',
+          text: 'Library',
           onPress: pickImage,
-        },
-        {
-          text: 'Multiple Photos',
-          onPress: pickMultipleImages,
         },
         {
           text: 'Cancel',
@@ -218,6 +306,49 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       console.error('Error picking multiple images:', error);
       Alert.alert('Error', 'Failed to select multiple images. Please try again.');
     }
+  };
+
+  const applyEffect = async (effect: Effect | CustomEffect) => {
+    console.log('✨ Applying effect:', effect.name);
+    if (!currentImage) {
+      Alert.alert('No Image', 'Please select an image first');
+      return;
+    }
+
+    // Map 'nano-banana' to 'nano' for the API
+    const model = effect.model === 'nano-banana' ? 'nano' : effect.model;
+    
+    if (isMultiImageMode && selectedSourceImages.length > 1) {
+      await processMultiImageEdit(effect.prompt, model as 'qwen' | 'nano');
+    } else {
+      await processImageEdit(effect.prompt, model as 'qwen' | 'nano');
+    }
+  };
+
+  const handleCreateCustomEffect = () => {
+    if (!newEffectName.trim() || !newEffectPrompt.trim()) {
+      Alert.alert('Missing Information', 'Please provide both a name and prompt for your effect.');
+      return;
+    }
+
+    const newEffect: CustomEffect = {
+      id: `custom-${Date.now()}`,
+      name: newEffectName.trim(),
+      icon: 'sparkles-outline',
+      prompt: newEffectPrompt.trim(),
+      model: newEffectModel,
+      isCustom: true,
+    };
+
+    setCustomEffects(prev => [...prev, newEffect]);
+    setShowCustomEffectModal(false);
+    
+    // Reset form
+    setNewEffectName('');
+    setNewEffectPrompt('');
+    setNewEffectModel('qwen');
+    
+    Alert.alert('Success', `Custom effect "${newEffect.name}" created!`);
   };
 
   const handleEditPhoto = () => {
@@ -963,93 +1094,246 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               </TouchableOpacity>
             </View> */}
 
-            {/* Action buttons row */}
-            <View style={styles.actionButtonsRow}>
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
-                ]}
-                onPress={handleEditPhoto}
-                disabled={isEditing || isGeneratingVideo || isSaving}
+            {/* AI Editing Effects Section */}
+            <View style={styles.effectsContainer}>
+              {/* Collapsible Header */}
+              <TouchableOpacity 
+                style={styles.effectsHeader}
+                onPress={() => setIsEffectsExpanded(!isEffectsExpanded)}
+                activeOpacity={0.7}
               >
-                <View style={styles.actionButtonContainer}>
-                  <View style={styles.iconContainer}>
-                    {isEditing ? (
-                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
-                    ) : (
-                      <Feather name="edit-3" size={26} color={textColor} />
+                <Text style={[styles.effectsTitle, { color: textColor }]}>AI Editing Effects</Text>
+                <Ionicons 
+                  name={isEffectsExpanded ? "chevron-down" : "chevron-up"} 
+                  size={24} 
+                  color={textColor} 
+                />
+              </TouchableOpacity>
+              
+              {isEffectsExpanded && (
+                <>
+                  {/* Tabs */}
+                  <View style={styles.tabsContainer}>
+                    {(['Funny', 'Replace', 'Environment', 'Custom'] as const).map((tab) => (
+                      <TouchableOpacity
+                        key={tab}
+                        style={styles.tab}
+                        onPress={() => setSelectedTab(tab)}
+                      >
+                        <Text 
+                          style={[
+                            styles.tabText, 
+                            { color: textColor },
+                            selectedTab === tab && styles.tabTextActive
+                          ]}
+                        >
+                          {tab}
+                        </Text>
+                        {selectedTab === tab && (
+                          <View style={[styles.tabIndicator, { backgroundColor: textColor }]} />
+                        )}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+
+                  {/* Effects Content */}
+                  <View style={styles.effectsContent}>
+                    {selectedTab === 'Funny' && FUNNY_EFFECTS.map((effect) => (
+                      <TouchableOpacity 
+                        key={effect.id}
+                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        onPress={() => applyEffect(effect)}
+                        disabled={isEditing || isGeneratingVideo || isSaving}
+                      >
+                        <View style={styles.effectItemLeft}>
+                          <Ionicons name={effect.icon} size={24} color={textColor} />
+                          <View style={styles.effectItemTextContainer}>
+                            <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
+                            <Text style={[styles.effectItemModel, { color: textColor }]}>
+                              Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                      </TouchableOpacity>
+                    ))}
+
+                    {selectedTab === 'Replace' && REPLACE_EFFECTS.map((effect) => (
+                      <TouchableOpacity 
+                        key={effect.id}
+                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        onPress={() => applyEffect(effect)}
+                        disabled={isEditing || isGeneratingVideo || isSaving}
+                      >
+                        <View style={styles.effectItemLeft}>
+                          <Ionicons name={effect.icon} size={24} color={textColor} />
+                          <View style={styles.effectItemTextContainer}>
+                            <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
+                            <Text style={[styles.effectItemModel, { color: textColor }]}>
+                              Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                      </TouchableOpacity>
+                    ))}
+
+                    {selectedTab === 'Environment' && ENVIRONMENT_EFFECTS.map((effect) => (
+                      <TouchableOpacity 
+                        key={effect.id}
+                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        onPress={() => applyEffect(effect)}
+                        disabled={isEditing || isGeneratingVideo || isSaving}
+                      >
+                        <View style={styles.effectItemLeft}>
+                          <Ionicons name={effect.icon} size={24} color={textColor} />
+                          <View style={styles.effectItemTextContainer}>
+                            <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
+                            <Text style={[styles.effectItemModel, { color: textColor }]}>
+                              Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                      </TouchableOpacity>
+                    ))}
+
+                    {selectedTab === 'Custom' && (
+                      <>
+                        <Text style={[styles.sectionTitle, { color: textColor }]}>Custom Effects</Text>
+                        
+                        {customEffects.map((effect) => (
+                          <TouchableOpacity 
+                            key={effect.id}
+                            style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                            onPress={() => applyEffect(effect)}
+                            disabled={isEditing || isGeneratingVideo || isSaving}
+                          >
+                            <View style={styles.effectItemLeft}>
+                              <Ionicons name={effect.icon} size={24} color={textColor} />
+                              <View style={styles.effectItemTextContainer}>
+                                <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
+                                <Text style={[styles.effectItemModel, { color: textColor }]}>
+                                  Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                                </Text>
+                              </View>
+                            </View>
+                            <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                          </TouchableOpacity>
+                        ))}
+
+                        <TouchableOpacity 
+                          style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                          onPress={() => setShowCustomEffectModal(true)}
+                          disabled={isEditing || isGeneratingVideo || isSaving}
+                        >
+                          <View style={styles.effectItemLeft}>
+                            <Ionicons name="add-circle-outline" size={24} color={tintColor} />
+                            <Text style={[styles.effectItemText, { color: tintColor }]}>+ Create New Effect</Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={20} color={tintColor} style={{ opacity: 0.5 }} />
+                        </TouchableOpacity>
+                      </>
                     )}
                   </View>
-                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
-                    {isEditing ? 'Editing' : isMultiImageMode && selectedSourceImages.length > 1 ? 'Combine' : 'Edit'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
-                ]}
-                onPress={handleMakeVideo}
-                disabled={isEditing || isGeneratingVideo || isSaving}
-              >
-                <View style={styles.actionButtonContainer}>
-                  <View style={styles.iconContainer}>
-                    {isGeneratingVideo ? (
-                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
-                    ) : (
-                      <Ionicons name="videocam" size={26} color={textColor} />
-                    )}
-                  </View>
-                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
-                    {isGeneratingVideo ? 'Creating' : 'Video'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
-                ]}
-                onPress={handleSaveMedia}
-                disabled={isEditing || isGeneratingVideo || isSaving}
-              >
-                <View style={styles.actionButtonContainer}>
-                  <View style={styles.iconContainer}>
-                    {isSaving ? (
-                      <Ionicons name="hourglass-outline" size={26} color={textColor} />
-                    ) : (
-                      <Ionicons name="download-outline" size={26} color={textColor} />
-                    )}
-                  </View>
-                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>
-                    {isSaving ? 'Saving' : 'Save'}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.actionButton,
-                  { opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1 }
-                ]}
-                onPress={showImagePickerOptions}
-                disabled={isEditing || isGeneratingVideo || isSaving}
-              >
-                <View style={styles.actionButtonContainer}>
-                  <View style={styles.iconContainer}>
-                    <Ionicons name="camera" size={26} color={textColor} />
-                  </View>
-                  <Text style={[styles.actionButtonLabel, { color: textColor }]}>New</Text>
-                </View>
-              </TouchableOpacity>
+                </>
+              )}
             </View>
           </View>
         </View>
       )}
+
+      {/* Custom Effect Creation Modal */}
+      <Modal
+        visible={showCustomEffectModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomEffectModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: textColor }]}>Create Custom Effect</Text>
+              <TouchableOpacity onPress={() => setShowCustomEffectModal(false)}>
+                <Ionicons name="close" size={28} color={textColor} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={[styles.modalLabel, { color: textColor }]}>Effect Name</Text>
+              <TextInput
+                style={[styles.modalInput, { color: textColor, borderColor: textColor + '40' }]}
+                placeholder="Enter effect name..."
+                placeholderTextColor={textColor + '60'}
+                value={newEffectName}
+                onChangeText={setNewEffectName}
+              />
+
+              <Text style={[styles.modalLabel, { color: textColor }]}>Effect Prompt</Text>
+              <TextInput
+                style={[styles.modalTextArea, { color: textColor, borderColor: textColor + '40' }]}
+                placeholder="Describe what this effect should do..."
+                placeholderTextColor={textColor + '60'}
+                value={newEffectPrompt}
+                onChangeText={setNewEffectPrompt}
+                multiline
+                numberOfLines={4}
+              />
+
+              <Text style={[styles.modalLabel, { color: textColor }]}>AI Model</Text>
+              <View style={styles.modelSelector}>
+                <TouchableOpacity
+                  style={[
+                    styles.modelOption,
+                    { borderColor: textColor + '40' },
+                    newEffectModel === 'qwen' && { backgroundColor: tintColor, borderColor: tintColor }
+                  ]}
+                  onPress={() => setNewEffectModel('qwen')}
+                >
+                  <Text style={[
+                    styles.modelOptionText,
+                    { color: newEffectModel === 'qwen' ? '#fff' : textColor }
+                  ]}>
+                    Qwen
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[
+                    styles.modelOption,
+                    { borderColor: textColor + '40' },
+                    newEffectModel === 'nano-banana' && { backgroundColor: tintColor, borderColor: tintColor }
+                  ]}
+                  onPress={() => setNewEffectModel('nano-banana')}
+                >
+                  <Text style={[
+                    styles.modelOptionText,
+                    { color: newEffectModel === 'nano-banana' ? '#fff' : textColor }
+                  ]}>
+                    Nano Banana
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel, { borderColor: textColor + '40' }]}
+                onPress={() => setShowCustomEffectModal(false)}
+              >
+                <Text style={[styles.modalButtonText, { color: textColor }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate, { backgroundColor: tintColor }]}
+                onPress={handleCreateCustomEffect}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Create Effect</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1254,36 +1538,181 @@ const styles = StyleSheet.create({
     width: 20,
     borderRadius: 2,
   },
-  actionButtonsRow: {
+  // Effects Container Styles
+  effectsContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
+  effectsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  effectsTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  tabsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    alignItems: 'center',
-    paddingVertical: 20,
-    paddingHorizontal: 16,
-    marginTop: 16,
     marginBottom: 20,
-    zIndex: 25,
+    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+    borderRadius: 12,
+    padding: 4,
   },
-  actionButton: {
+  tab: {
+    flex: 1,
     alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 60,
     paddingVertical: 12,
-    paddingHorizontal: 8,
-    zIndex: 25,
+    position: 'relative',
   },
-  actionButtonContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
+  tabText: {
+    fontSize: 15,
+    fontWeight: '500',
+    opacity: 0.6,
   },
-  iconContainer: {
-    // Shadow removed for cleaner look
-  },
-  actionButtonLabel: {
-    // color will be set dynamically based on theme
-    fontSize: 14,
+  tabTextActive: {
+    opacity: 1,
     fontWeight: '600',
-    textAlign: 'center',
+  },
+  tabIndicator: {
+    position: 'absolute',
+    bottom: 0,
+    left: '20%',
+    right: '20%',
+    height: 3,
+    borderRadius: 2,
+  },
+  effectsContent: {
+    marginBottom: 20,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
     marginTop: 8,
+  },
+  effectItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    backgroundColor: 'rgba(128, 128, 128, 0.05)',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  effectItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    flex: 1,
+  },
+  effectItemTextContainer: {
+    flex: 1,
+  },
+  effectItemText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  effectItemModel: {
+    fontSize: 12,
+    opacity: 0.6,
+    marginTop: 4,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: 20,
+    maxHeight: '80%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(128, 128, 128, 0.2)',
+  },
+  modalTitle: {
+    fontSize: 22,
+    fontWeight: '700',
+  },
+  modalBody: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+  },
+  modalTextArea: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    minHeight: 100,
+    textAlignVertical: 'top',
+  },
+  modelSelector: {
+    flexDirection: 'row',
+    gap: 12,
+    marginBottom: 20,
+  },
+  modelOption: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 2,
+    alignItems: 'center',
+  },
+  modelOptionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalFooter: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    borderWidth: 2,
+  },
+  modalButtonCreate: {
+    // backgroundColor set dynamically
+  },
+  modalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
