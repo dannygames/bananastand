@@ -1,5 +1,6 @@
 import { useThemeColor } from '@/hooks/useThemeColor';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ResizeMode, Video } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
 import { Image } from 'expo-image';
@@ -194,6 +195,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [selectedTab, setSelectedTab] = useState<'Funny' | 'Replace' | 'Environment' | 'Custom'>('Funny');
   const [isEffectsExpanded, setIsEffectsExpanded] = useState(false);
   const [customEffects, setCustomEffects] = useState<CustomEffect[]>([]);
+  const [hasLoadedEffects, setHasLoadedEffects] = useState(false);
   const [showCustomEffectModal, setShowCustomEffectModal] = useState(false);
   const [newEffectName, setNewEffectName] = useState('');
   const [newEffectPrompt, setNewEffectPrompt] = useState('');
@@ -213,6 +215,49 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const insets = useSafeAreaInsets();
 
   const currentImage = imageVersions.length > 0 ? imageVersions[currentImageIndex] : null;
+
+  // Load custom effects from AsyncStorage on mount
+  useEffect(() => {
+    const loadCustomEffects = async () => {
+      try {
+        const savedEffects = await AsyncStorage.getItem('@custom_effects');
+        if (savedEffects) {
+          const parsedEffects = JSON.parse(savedEffects);
+          setCustomEffects(parsedEffects);
+          console.log('✅ Loaded custom effects:', parsedEffects.length);
+        }
+      } catch (error) {
+        console.error('❌ Error loading custom effects:', error);
+      } finally {
+        setHasLoadedEffects(true);
+      }
+    };
+
+    loadCustomEffects();
+  }, []);
+
+  // Save custom effects to AsyncStorage whenever they change
+  useEffect(() => {
+    // Don't save until we've loaded effects from storage
+    if (!hasLoadedEffects) return;
+
+    const saveCustomEffects = async () => {
+      try {
+        if (customEffects.length === 0) {
+          // Clear storage if no effects
+          await AsyncStorage.removeItem('@custom_effects');
+          console.log('🗑️ Cleared custom effects from storage');
+        } else {
+          await AsyncStorage.setItem('@custom_effects', JSON.stringify(customEffects));
+          console.log('💾 Saved custom effects:', customEffects.length);
+        }
+      } catch (error) {
+        console.error('❌ Error saving custom effects:', error);
+      }
+    };
+
+    saveCustomEffects();
+  }, [customEffects, hasLoadedEffects]);
 
   // Effect to show save prompt after custom option is used
   useEffect(() => {
