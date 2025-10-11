@@ -38,6 +38,7 @@ interface Effect {
   prompt: string;
   model: 'qwen' | 'nano-banana';
   options?: EffectOption[]; // Optional list of selectable options
+  isVideoEffect?: boolean; // If true, generates video instead of editing image
 }
 
 interface CustomEffect extends Effect {
@@ -183,6 +184,25 @@ const ENVIRONMENT_EFFECTS: Effect[] = [
   },
 ];
 
+const VIDEO_EFFECTS: Effect[] = [
+  { 
+    id: 'funny-video', 
+    name: 'Funny', 
+    icon: 'happy-outline', 
+    prompt: 'Make it funny', 
+    model: 'qwen',
+    isVideoEffect: true
+  },
+  { 
+    id: 'custom-video', 
+    name: 'Custom', 
+    icon: 'create-outline', 
+    prompt: '', 
+    model: 'qwen',
+    isVideoEffect: true
+  },
+];
+
 export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [imageVersions, setImageVersions] = useState<ImageVersion[]>([]);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
@@ -192,7 +212,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const [selectedSourceImages, setSelectedSourceImages] = useState<string[]>([]);
   const [isMultiImageMode, setIsMultiImageMode] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'Funny' | 'Replace' | 'Environment' | 'Custom'>('Funny');
+  const [selectedTab, setSelectedTab] = useState<'Funny' | 'Replace' | 'Environment' | 'Video Effect' | 'Custom'>('Funny');
   const [isEffectsExpanded, setIsEffectsExpanded] = useState(false);
   const [customEffects, setCustomEffects] = useState<CustomEffect[]>([]);
   const [hasLoadedEffects, setHasLoadedEffects] = useState(false);
@@ -447,6 +467,15 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       return;
     }
 
+    // Check if current media is a video
+    if (currentImage.isVideo) {
+      Alert.alert(
+        'Videos Not Supported', 
+        'Effects can only be applied to images. Please select an image to use image or video effects.'
+      );
+      return;
+    }
+
     // If effect has options but no option selected, show options modal
     if (effect.options && effect.options.length > 0 && !option) {
       setSelectedEffect(effect);
@@ -457,10 +486,27 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     // Build the final prompt
     let finalPrompt = effect.prompt;
     if (option) {
-      finalPrompt = `${effect.prompt} ${option.promptModifier}`;
+      finalPrompt = option.promptModifier || effect.prompt;
+      if (effect.prompt && option.promptModifier) {
+        finalPrompt = `${effect.prompt} ${option.promptModifier}`;
+      }
     }
 
     console.log('📝 Final prompt:', finalPrompt);
+
+    // Handle video effects
+    if (effect.isVideoEffect) {
+      // For custom video with empty prompt, show custom input
+      if (effect.id === 'custom-video' && !finalPrompt) {
+        setSelectedEffect(effect);
+        setShowCustomOptionModal(true);
+        return;
+      }
+      
+      // Generate video
+      await generateVideo('custom', finalPrompt);
+      return;
+    }
 
     // Map 'nano-banana' to 'nano' for the API
     const model = effect.model === 'nano-banana' ? 'nano' : effect.model;
@@ -501,7 +547,16 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
     setShowCustomOptionModal(false);
     
-    // Store for potential saving
+    // Handle video effects differently
+    if (selectedEffect.isVideoEffect) {
+      // For video effects, directly generate video with the custom prompt
+      generateVideo('custom', customOptionInput.trim());
+      setCustomOptionInput('');
+      setSelectedEffect(null);
+      return;
+    }
+    
+    // Store for potential saving (image effects only)
     setLastUsedCustomOption({ effect: selectedEffect, option: customOption });
     
     // Apply the effect
@@ -1426,11 +1481,25 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 />
               </TouchableOpacity>
               
+              {currentImage?.isVideo && isEffectsExpanded && (
+                <View style={styles.videoWarningContainer}>
+                  <Ionicons name="information-circle-outline" size={20} color={textColor} style={{ opacity: 0.7 }} />
+                  <Text style={[styles.videoWarningText, { color: textColor }]}>
+                    Effects can only be applied to images. Please select an image to use effects.
+                  </Text>
+                </View>
+              )}
+              
               {isEffectsExpanded && (
                 <>
                   {/* Tabs */}
-                  <View style={styles.tabsContainer}>
-                    {(['Funny', 'Replace', 'Environment', 'Custom'] as const).map((tab) => (
+                  <ScrollView 
+                    horizontal 
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.tabsScrollContainer}
+                    contentContainerStyle={styles.tabsContainer}
+                  >
+                    {(['Funny', 'Replace', 'Environment', 'Video Effect', 'Custom'] as const).map((tab) => (
                       <TouchableOpacity
                         key={tab}
                         style={styles.tab}
@@ -1450,16 +1519,22 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                         )}
                       </TouchableOpacity>
                     ))}
-                  </View>
+                  </ScrollView>
 
                   {/* Effects Content */}
                   <View style={styles.effectsContent}>
                     {selectedTab === 'Funny' && FUNNY_EFFECTS.map((effect) => (
                       <TouchableOpacity 
                         key={effect.id}
-                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        style={[
+                          styles.effectItem, 
+                          { 
+                            borderBottomColor: textColor + '20',
+                            opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                          }
+                        ]}
                         onPress={() => applyEffect(effect)}
-                        disabled={isEditing || isGeneratingVideo || isSaving}
+                        disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
                       >
                         <View style={styles.effectItemLeft}>
                           <Ionicons name={effect.icon} size={24} color={textColor} />
@@ -1477,9 +1552,15 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                     {selectedTab === 'Replace' && REPLACE_EFFECTS.map((effect) => (
                       <TouchableOpacity 
                         key={effect.id}
-                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        style={[
+                          styles.effectItem, 
+                          { 
+                            borderBottomColor: textColor + '20',
+                            opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                          }
+                        ]}
                         onPress={() => applyEffect(effect)}
-                        disabled={isEditing || isGeneratingVideo || isSaving}
+                        disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
                       >
                         <View style={styles.effectItemLeft}>
                           <Ionicons name={effect.icon} size={24} color={textColor} />
@@ -1497,9 +1578,15 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                     {selectedTab === 'Environment' && ENVIRONMENT_EFFECTS.map((effect) => (
                       <TouchableOpacity 
                         key={effect.id}
-                        style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                        style={[
+                          styles.effectItem, 
+                          { 
+                            borderBottomColor: textColor + '20',
+                            opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                          }
+                        ]}
                         onPress={() => applyEffect(effect)}
-                        disabled={isEditing || isGeneratingVideo || isSaving}
+                        disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
                       >
                         <View style={styles.effectItemLeft}>
                           <Ionicons name={effect.icon} size={24} color={textColor} />
@@ -1507,6 +1594,32 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                             <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
                             <Text style={[styles.effectItemModel, { color: textColor }]}>
                               Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                            </Text>
+                          </View>
+                        </View>
+                        <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                      </TouchableOpacity>
+                    ))}
+
+                    {selectedTab === 'Video Effect' && VIDEO_EFFECTS.map((effect) => (
+                      <TouchableOpacity 
+                        key={effect.id}
+                        style={[
+                          styles.effectItem, 
+                          { 
+                            borderBottomColor: textColor + '20',
+                            opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                          }
+                        ]}
+                        onPress={() => applyEffect(effect)}
+                        disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
+                      >
+                        <View style={styles.effectItemLeft}>
+                          <Ionicons name={effect.icon} size={24} color={textColor} />
+                          <View style={styles.effectItemTextContainer}>
+                            <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
+                            <Text style={[styles.effectItemModel, { color: textColor }]}>
+                              {effect.prompt || 'Custom video animation'}
                             </Text>
                           </View>
                         </View>
@@ -1530,10 +1643,16 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                         {customEffects.map((effect) => (
                           <TouchableOpacity 
                             key={effect.id}
-                            style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                            style={[
+                              styles.effectItem, 
+                              { 
+                                borderBottomColor: textColor + '20',
+                                opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                              }
+                            ]}
                             onPress={() => applyEffect(effect)}
                             onLongPress={() => handleLongPressCustomEffect(effect)}
-                            disabled={isEditing || isGeneratingVideo || isSaving}
+                            disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
                           >
                             <View style={styles.effectItemLeft}>
                               <Ionicons name={effect.icon} size={24} color={textColor} />
@@ -1552,9 +1671,15 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                         ))}
 
                         <TouchableOpacity 
-                          style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
+                          style={[
+                            styles.effectItem, 
+                            { 
+                              borderBottomColor: textColor + '20',
+                              opacity: (currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving) ? 0.4 : 1
+                            }
+                          ]}
                           onPress={() => setShowCustomEffectModal(true)}
-                          disabled={isEditing || isGeneratingVideo || isSaving}
+                          disabled={currentImage?.isVideo || isEditing || isGeneratingVideo || isSaving}
                         >
                           <View style={styles.effectItemLeft}>
                             <Ionicons name="add-circle-outline" size={24} color={tintColor} />
@@ -1747,7 +1872,7 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           <View style={[styles.modalContent, { backgroundColor }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: textColor }]}>
-                Custom {selectedEffect?.name}
+                {selectedEffect?.isVideoEffect ? 'Custom Video' : `Custom ${selectedEffect?.name}`}
               </Text>
               <TouchableOpacity onPress={() => {
                 setShowCustomOptionModal(false);
@@ -1759,14 +1884,22 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
 
             <View style={styles.modalBody}>
               <Text style={[styles.modalLabel, { color: textColor }]}>
-                Describe your custom option:
+                {selectedEffect?.isVideoEffect 
+                  ? 'Describe the video animation:' 
+                  : 'Describe your custom option:'
+                }
               </Text>
-              <Text style={[styles.customInputHint, { color: textColor }]}>
-                Base prompt: "{selectedEffect?.prompt}"
-              </Text>
+              {selectedEffect?.prompt && !selectedEffect?.isVideoEffect && (
+                <Text style={[styles.customInputHint, { color: textColor }]}>
+                  Base prompt: "{selectedEffect?.prompt}"
+                </Text>
+              )}
               <TextInput
                 style={[styles.modalTextArea, { color: textColor, borderColor: textColor + '40' }]}
-                placeholder="e.g., a magical sunset with purple clouds..."
+                placeholder={selectedEffect?.isVideoEffect 
+                  ? "e.g., Create a fun, comedic video animation with exaggerated movements..."
+                  : "e.g., a magical sunset with purple clouds..."
+                }
                 placeholderTextColor={textColor + '60'}
                 value={customOptionInput}
                 onChangeText={setCustomOptionInput}
@@ -2030,18 +2163,37 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '700',
   },
+  videoWarningContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 193, 7, 0.15)',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  videoWarningText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    opacity: 0.8,
+  },
+  tabsScrollContainer: {
+    marginBottom: 20,
+  },
   tabsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
     backgroundColor: 'rgba(128, 128, 128, 0.1)',
     borderRadius: 12,
     padding: 4,
+    paddingHorizontal: 8,
   },
   tab: {
-    flex: 1,
+    minWidth: 80,
     alignItems: 'center',
     paddingVertical: 12,
+    paddingHorizontal: 12,
     position: 'relative',
   },
   tabText: {
