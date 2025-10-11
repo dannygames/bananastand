@@ -200,6 +200,11 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [newEffectModel, setNewEffectModel] = useState<'qwen' | 'nano-banana'>('qwen');
   const [showOptionsModal, setShowOptionsModal] = useState(false);
   const [selectedEffect, setSelectedEffect] = useState<Effect | CustomEffect | null>(null);
+  const [showCustomOptionModal, setShowCustomOptionModal] = useState(false);
+  const [customOptionInput, setCustomOptionInput] = useState('');
+  const [editingCustomEffect, setEditingCustomEffect] = useState<CustomEffect | null>(null);
+  const [showSaveCustomOptionPrompt, setShowSaveCustomOptionPrompt] = useState(false);
+  const [lastUsedCustomOption, setLastUsedCustomOption] = useState<{ effect: Effect | CustomEffect; option: EffectOption } | null>(null);
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
@@ -208,6 +213,17 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const insets = useSafeAreaInsets();
 
   const currentImage = imageVersions.length > 0 ? imageVersions[currentImageIndex] : null;
+
+  // Effect to show save prompt after custom option is used
+  useEffect(() => {
+    if (showSaveCustomOptionPrompt) {
+      // Delay to let the effect apply first
+      const timer = setTimeout(() => {
+        handleSaveCustomOption();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSaveCustomOptionPrompt]);
 
   // Effect to scroll to the current image when index changes
   useEffect(() => {
@@ -411,12 +427,89 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     }
   };
 
-  const handleOptionSelected = (option: EffectOption) => {
-    if (selectedEffect) {
+  const handleOptionSelected = (option: EffectOption | 'custom') => {
+    if (!selectedEffect) return;
+
+    if (option === 'custom') {
+      // Show custom input modal
+      setShowOptionsModal(false);
+      setShowCustomOptionModal(true);
+    } else {
+      // Apply the predefined option
       setShowOptionsModal(false);
       applyEffect(selectedEffect, option);
       setSelectedEffect(null);
     }
+  };
+
+  const handleCustomOptionSubmit = () => {
+    if (!selectedEffect || !customOptionInput.trim()) {
+      Alert.alert('Missing Input', 'Please enter your custom option.');
+      return;
+    }
+
+    const customOption: EffectOption = {
+      id: 'custom',
+      label: 'Custom',
+      promptModifier: customOptionInput.trim(),
+    };
+
+    setShowCustomOptionModal(false);
+    
+    // Store for potential saving
+    setLastUsedCustomOption({ effect: selectedEffect, option: customOption });
+    
+    // Apply the effect
+    applyEffect(selectedEffect, customOption);
+    
+    // Ask if user wants to save this as a reusable custom effect
+    setShowSaveCustomOptionPrompt(true);
+    
+    // Reset
+    setCustomOptionInput('');
+    setSelectedEffect(null);
+  };
+
+  const handleSaveCustomOption = () => {
+    if (!lastUsedCustomOption) return;
+
+    Alert.prompt(
+      'Save Custom Effect',
+      'Give this effect a name so you can use it again:',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            setShowSaveCustomOptionPrompt(false);
+            setLastUsedCustomOption(null);
+          }
+        },
+        {
+          text: 'Save',
+          onPress: (effectName) => {
+            if (effectName && effectName.trim()) {
+              const newEffect: CustomEffect = {
+                id: `custom-${Date.now()}`,
+                name: effectName.trim(),
+                icon: lastUsedCustomOption.effect.icon,
+                prompt: `${lastUsedCustomOption.effect.prompt} ${lastUsedCustomOption.option.promptModifier}`,
+                model: lastUsedCustomOption.effect.model,
+                isCustom: true,
+              };
+              
+              setCustomEffects(prev => [...prev, newEffect]);
+              Alert.alert('Success', `Custom effect "${newEffect.name}" saved!`);
+            }
+            setShowSaveCustomOptionPrompt(false);
+            setLastUsedCustomOption(null);
+          }
+        }
+      ],
+      'plain-text',
+      '',
+      'default'
+    );
   };
 
   const handleCreateCustomEffect = () => {
@@ -425,24 +518,93 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
       return;
     }
 
-    const newEffect: CustomEffect = {
-      id: `custom-${Date.now()}`,
-      name: newEffectName.trim(),
-      icon: 'sparkles-outline',
-      prompt: newEffectPrompt.trim(),
-      model: newEffectModel,
-      isCustom: true,
-    };
+    if (editingCustomEffect) {
+      // Update existing effect
+      const updatedEffect: CustomEffect = {
+        ...editingCustomEffect,
+        name: newEffectName.trim(),
+        prompt: newEffectPrompt.trim(),
+        model: newEffectModel,
+      };
 
-    setCustomEffects(prev => [...prev, newEffect]);
+      setCustomEffects(prev => prev.map(effect => 
+        effect.id === editingCustomEffect.id ? updatedEffect : effect
+      ));
+      
+      Alert.alert('Success', `Custom effect "${updatedEffect.name}" updated!`);
+    } else {
+      // Create new effect
+      const newEffect: CustomEffect = {
+        id: `custom-${Date.now()}`,
+        name: newEffectName.trim(),
+        icon: 'sparkles-outline',
+        prompt: newEffectPrompt.trim(),
+        model: newEffectModel,
+        isCustom: true,
+      };
+
+      setCustomEffects(prev => [...prev, newEffect]);
+      Alert.alert('Success', `Custom effect "${newEffect.name}" created!`);
+    }
+
     setShowCustomEffectModal(false);
     
     // Reset form
     setNewEffectName('');
     setNewEffectPrompt('');
     setNewEffectModel('qwen');
-    
-    Alert.alert('Success', `Custom effect "${newEffect.name}" created!`);
+    setEditingCustomEffect(null);
+  };
+
+  const handleEditCustomEffect = (effect: CustomEffect) => {
+    setEditingCustomEffect(effect);
+    setNewEffectName(effect.name);
+    setNewEffectPrompt(effect.prompt);
+    setNewEffectModel(effect.model);
+    setShowCustomEffectModal(true);
+  };
+
+  const handleDeleteCustomEffect = (effect: CustomEffect) => {
+    Alert.alert(
+      'Delete Effect',
+      `Are you sure you want to delete "${effect.name}"?`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setCustomEffects(prev => prev.filter(e => e.id !== effect.id));
+            Alert.alert('Deleted', `"${effect.name}" has been deleted.`);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleLongPressCustomEffect = (effect: CustomEffect) => {
+    Alert.alert(
+      effect.name,
+      'What would you like to do?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Edit',
+          onPress: () => handleEditCustomEffect(effect),
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => handleDeleteCustomEffect(effect),
+        },
+      ]
+    );
   };
 
   const handleEditPhoto = () => {
@@ -1093,6 +1255,21 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
               <Ionicons name="close" size={24} color={backgroundColor === '#fff' ? '#ffffff' : '#000000'} />
             </TouchableOpacity>
 
+            {/* Floating Save button - below close button */}
+            <TouchableOpacity
+              style={[
+                styles.floatingSaveButton,
+                { 
+                  opacity: (isEditing || isGeneratingVideo || isSaving) ? 0.3 : 1,
+                  backgroundColor: `rgba(${backgroundColor === '#fff' ? '0, 0, 0' : '255, 255, 255'}, 0.6)`
+                }
+              ]}
+              onPress={handleSaveMedia}
+              disabled={isEditing || isGeneratingVideo || isSaving}
+            >
+              <Ionicons name="download-outline" size={24} color={backgroundColor === '#fff' ? '#ffffff' : '#000000'} />
+            </TouchableOpacity>
+
             {/* Loading Overlay */}
             {(isEditing || isGeneratingVideo || isSaving) && (
               <View style={styles.loadingOverlay}>
@@ -1296,11 +1473,21 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                       <>
                         <Text style={[styles.sectionTitle, { color: textColor }]}>Custom Effects</Text>
                         
+                        {customEffects.length === 0 && (
+                          <View style={styles.emptyCustomEffects}>
+                            <Text style={[styles.emptyCustomEffectsText, { color: textColor }]}>
+                              No custom effects yet.{'\n'}
+                              Use "Custom Option" in any effect or tap "Create New Effect" below.
+                            </Text>
+                          </View>
+                        )}
+                        
                         {customEffects.map((effect) => (
                           <TouchableOpacity 
                             key={effect.id}
                             style={[styles.effectItem, { borderBottomColor: textColor + '20' }]}
                             onPress={() => applyEffect(effect)}
+                            onLongPress={() => handleLongPressCustomEffect(effect)}
                             disabled={isEditing || isGeneratingVideo || isSaving}
                           >
                             <View style={styles.effectItemLeft}>
@@ -1309,6 +1496,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                                 <Text style={[styles.effectItemText, { color: textColor }]}>{effect.name}</Text>
                                 <Text style={[styles.effectItemModel, { color: textColor }]}>
                                   Model: {effect.model === 'nano-banana' ? 'Nano Banana' : 'Qwen'}
+                                </Text>
+                                <Text style={[styles.effectItemHint, { color: textColor }]}>
+                                  Long press to edit or delete
                                 </Text>
                               </View>
                             </View>
@@ -1347,8 +1537,16 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { backgroundColor }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: textColor }]}>Create Custom Effect</Text>
-              <TouchableOpacity onPress={() => setShowCustomEffectModal(false)}>
+              <Text style={[styles.modalTitle, { color: textColor }]}>
+                {editingCustomEffect ? 'Edit Custom Effect' : 'Create Custom Effect'}
+              </Text>
+              <TouchableOpacity onPress={() => {
+                setShowCustomEffectModal(false);
+                setEditingCustomEffect(null);
+                setNewEffectName('');
+                setNewEffectPrompt('');
+                setNewEffectModel('qwen');
+              }}>
                 <Ionicons name="close" size={28} color={textColor} />
               </TouchableOpacity>
             </View>
@@ -1413,7 +1611,13 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
             <View style={styles.modalFooter}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalButtonCancel, { borderColor: textColor + '40' }]}
-                onPress={() => setShowCustomEffectModal(false)}
+                onPress={() => {
+                  setShowCustomEffectModal(false);
+                  setEditingCustomEffect(null);
+                  setNewEffectName('');
+                  setNewEffectPrompt('');
+                  setNewEffectModel('qwen');
+                }}
               >
                 <Text style={[styles.modalButtonText, { color: textColor }]}>Cancel</Text>
               </TouchableOpacity>
@@ -1422,7 +1626,9 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                 style={[styles.modalButton, styles.modalButtonCreate, { backgroundColor: tintColor }]}
                 onPress={handleCreateCustomEffect}
               >
-                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Create Effect</Text>
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>
+                  {editingCustomEffect ? 'Update Effect' : 'Create Effect'}
+                </Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1465,7 +1671,84 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
                   <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
                 </TouchableOpacity>
               ))}
+
+              {/* Custom Option */}
+              <TouchableOpacity
+                style={[styles.optionButton, styles.customOptionButton, { borderColor: tintColor }]}
+                onPress={() => handleOptionSelected('custom')}
+                disabled={isEditing || isGeneratingVideo || isSaving}
+              >
+                <View style={styles.customOptionContent}>
+                  <Ionicons name="create-outline" size={24} color={tintColor} />
+                  <Text style={[styles.optionButtonText, { color: tintColor }]}>
+                    ✏️ Custom Option
+                  </Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={tintColor} style={{ opacity: 0.7 }} />
+              </TouchableOpacity>
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Custom Option Input Modal */}
+      <Modal
+        visible={showCustomOptionModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowCustomOptionModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: textColor }]}>
+                Custom {selectedEffect?.name}
+              </Text>
+              <TouchableOpacity onPress={() => {
+                setShowCustomOptionModal(false);
+                setCustomOptionInput('');
+              }}>
+                <Ionicons name="close" size={28} color={textColor} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              <Text style={[styles.modalLabel, { color: textColor }]}>
+                Describe your custom option:
+              </Text>
+              <Text style={[styles.customInputHint, { color: textColor }]}>
+                Base prompt: "{selectedEffect?.prompt}"
+              </Text>
+              <TextInput
+                style={[styles.modalTextArea, { color: textColor, borderColor: textColor + '40' }]}
+                placeholder="e.g., a magical sunset with purple clouds..."
+                placeholderTextColor={textColor + '60'}
+                value={customOptionInput}
+                onChangeText={setCustomOptionInput}
+                multiline
+                numberOfLines={4}
+                autoFocus
+              />
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel, { borderColor: textColor + '40' }]}
+                onPress={() => {
+                  setShowCustomOptionModal(false);
+                  setCustomOptionInput('');
+                }}
+              >
+                <Text style={[styles.modalButtonText, { color: textColor }]}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCreate, { backgroundColor: tintColor }]}
+                onPress={handleCustomOptionSubmit}
+              >
+                <Text style={[styles.modalButtonText, { color: '#fff' }]}>Apply</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -1562,6 +1845,18 @@ const styles = StyleSheet.create({
   floatingCloseButton: {
     position: 'absolute',
     top: 60, // Account for status bar
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    // backgroundColor will be set dynamically based on theme
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  floatingSaveButton: {
+    position: 'absolute',
+    top: 114, // Below the close button (60 + 44 + 10)
     right: 20,
     width: 44,
     height: 44,
@@ -1759,6 +2054,23 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     marginTop: 4,
   },
+  effectItemHint: {
+    fontSize: 11,
+    opacity: 0.5,
+    marginTop: 2,
+    fontStyle: 'italic',
+  },
+  emptyCustomEffects: {
+    paddingVertical: 32,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  emptyCustomEffectsText: {
+    fontSize: 14,
+    textAlign: 'center',
+    opacity: 0.6,
+    lineHeight: 20,
+  },
   // Modal Styles
   modalOverlay: {
     flex: 1,
@@ -1870,5 +2182,21 @@ const styles = StyleSheet.create({
   optionButtonText: {
     fontSize: 18,
     fontWeight: '500',
+  },
+  customOptionButton: {
+    borderWidth: 2,
+    borderStyle: 'dashed',
+  },
+  customOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  customInputHint: {
+    fontSize: 13,
+    opacity: 0.6,
+    fontStyle: 'italic',
+    marginBottom: 12,
+    marginTop: 4,
   },
 });
