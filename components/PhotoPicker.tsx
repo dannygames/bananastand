@@ -24,12 +24,19 @@ interface ImageVersion {
   sourceImages?: string[]; // Store source image URIs for multi-image edits
 }
 
+interface EffectOption {
+  id: string;
+  label: string;
+  promptModifier: string; // Text to append/modify the base prompt
+}
+
 interface Effect {
   id: string;
   name: string;
   icon: keyof typeof Ionicons.glyphMap;
   prompt: string;
   model: 'qwen' | 'nano-banana';
+  options?: EffectOption[]; // Optional list of selectable options
 }
 
 interface CustomEffect extends Effect {
@@ -46,46 +53,87 @@ const FUNNY_EFFECTS: Effect[] = [
     id: 'funny-face', 
     name: 'Funny Face', 
     icon: 'happy-outline', 
-    prompt: 'Transform face into a funny cartoon character with exaggerated features', 
-    model: 'qwen' 
+    prompt: 'Transform face into', 
+    model: 'qwen',
+    options: [
+      { id: 'cartoon', label: '😄 Cartoon Character', promptModifier: 'a funny cartoon character with exaggerated features' },
+      { id: 'emoji', label: '😂 Emoji Style', promptModifier: 'an emoji-style face with bold expressions' },
+      { id: 'caricature', label: '🎨 Caricature', promptModifier: 'a humorous caricature with exaggerated features' },
+      { id: 'pixar', label: '🎬 Pixar Style', promptModifier: 'a Pixar 3D animation style character' },
+    ]
   },
   { 
     id: 'cartoon-style', 
-    name: 'Cartoon Style', 
+    name: 'Art Style', 
     icon: 'color-wand-outline', 
-    prompt: 'Convert image to cartoon style with bold colors and outlines', 
-    model: 'qwen' 
+    prompt: 'Convert image to', 
+    model: 'qwen',
+    options: [
+      { id: 'cartoon', label: '🎨 Cartoon', promptModifier: 'cartoon style with bold colors and outlines' },
+      { id: 'anime', label: '⭐ Anime', promptModifier: 'anime art style with expressive eyes and features' },
+      { id: 'comic', label: '📚 Comic Book', promptModifier: 'comic book style with halftone dots and bold lines' },
+      { id: 'watercolor', label: '🖌️ Watercolor', promptModifier: 'watercolor painting style with soft blended colors' },
+      { id: 'oil-painting', label: '🎨 Oil Painting', promptModifier: 'classical oil painting style' },
+      { id: 'sketch', label: '✏️ Pencil Sketch', promptModifier: 'pencil sketch drawing style' },
+    ]
   },
   { 
-    id: 'anime-style', 
-    name: 'Anime Style', 
-    icon: 'star-outline', 
-    prompt: 'Transform into anime art style with expressive eyes and features', 
-    model: 'nano-banana' 
+    id: 'photo-filter', 
+    name: 'Photo Filter', 
+    icon: 'camera-outline', 
+    prompt: 'Apply', 
+    model: 'nano-banana',
+    options: [
+      { id: 'vintage', label: '📷 Vintage', promptModifier: 'vintage film photography filter with warm tones and grain' },
+      { id: 'black-white', label: '⚫⚪ Black & White', promptModifier: 'classic black and white photography' },
+      { id: 'sepia', label: '🟤 Sepia', promptModifier: 'sepia tone vintage photography' },
+      { id: 'cinematic', label: '🎬 Cinematic', promptModifier: 'cinematic color grading with enhanced contrast' },
+    ]
   },
 ];
 
 const REPLACE_EFFECTS: Effect[] = [
   { 
-    id: 'object-replace', 
-    name: 'Object Replacement', 
-    icon: 'swap-horizontal-outline', 
-    prompt: 'Replace selected object with another item while maintaining scene composition', 
-    model: 'qwen' 
-  },
-  { 
     id: 'background-change', 
     name: 'Background Change', 
     icon: 'person-outline', 
-    prompt: 'Change the background while keeping the subject intact', 
-    model: 'nano-banana' 
+    prompt: 'Change the background to', 
+    model: 'nano-banana',
+    options: [
+      { id: 'beach', label: '🏖️ Beach', promptModifier: 'a beautiful beach with ocean and sand' },
+      { id: 'city', label: '🏙️ City', promptModifier: 'a modern city skyline' },
+      { id: 'forest', label: '🌲 Forest', promptModifier: 'a lush forest with trees' },
+      { id: 'mountains', label: '⛰️ Mountains', promptModifier: 'majestic mountains' },
+      { id: 'space', label: '🚀 Space', promptModifier: 'outer space with stars and galaxies' },
+      { id: 'studio', label: '📸 Studio', promptModifier: 'a professional photo studio background' },
+    ]
   },
   { 
-    id: 'style-transfer', 
-    name: 'Style Transfer', 
-    icon: 'brush-outline', 
-    prompt: 'Apply artistic style from another image', 
-    model: 'qwen' 
+    id: 'remove-background', 
+    name: 'Remove Background', 
+    icon: 'cut-outline', 
+    prompt: 'Remove the background and replace with', 
+    model: 'qwen',
+    options: [
+      { id: 'white', label: '⚪ White', promptModifier: 'a clean white background' },
+      { id: 'transparent', label: '◻️ Transparent', promptModifier: 'transparent background (PNG)' },
+      { id: 'blur', label: '🌫️ Blur', promptModifier: 'a blurred version of the original background' },
+      { id: 'gradient', label: '🎨 Gradient', promptModifier: 'a colorful gradient background' },
+    ]
+  },
+  { 
+    id: 'add-objects', 
+    name: 'Add Objects', 
+    icon: 'add-circle-outline', 
+    prompt: 'Add', 
+    model: 'qwen',
+    options: [
+      { id: 'sunglasses', label: '🕶️ Sunglasses', promptModifier: 'stylish sunglasses to the person' },
+      { id: 'hat', label: '🎩 Hat', promptModifier: 'a fashionable hat to the person' },
+      { id: 'animals', label: '🐕 Pets', promptModifier: 'cute pets like dogs or cats to the scene' },
+      { id: 'flowers', label: '🌺 Flowers', promptModifier: 'beautiful flowers to the scene' },
+      { id: 'effects', label: '✨ Special Effects', promptModifier: 'magical special effects like sparkles or glows' },
+    ]
   },
 ];
 
@@ -94,22 +142,43 @@ const ENVIRONMENT_EFFECTS: Effect[] = [
     id: 'weather-change', 
     name: 'Weather Change', 
     icon: 'sunny-outline', 
-    prompt: 'Change weather conditions - make it sunny, rainy, snowy, or foggy', 
-    model: 'qwen' 
+    prompt: 'Change the weather in this image to', 
+    model: 'qwen',
+    options: [
+      { id: 'sunny', label: '☀️ Sunny', promptModifier: 'bright sunny weather with clear blue skies' },
+      { id: 'rainy', label: '🌧️ Rainy', promptModifier: 'rainy weather with rain drops and wet surfaces' },
+      { id: 'snowy', label: '❄️ Snowy', promptModifier: 'snowy weather with falling snow and snow-covered ground' },
+      { id: 'foggy', label: '🌫️ Foggy', promptModifier: 'foggy weather with thick fog and reduced visibility' },
+      { id: 'cloudy', label: '☁️ Cloudy', promptModifier: 'cloudy overcast weather with gray clouds' },
+      { id: 'stormy', label: '⛈️ Stormy', promptModifier: 'stormy weather with dark clouds and lightning' },
+    ]
   },
   { 
     id: 'time-of-day', 
     name: 'Time of Day', 
     icon: 'time-outline', 
-    prompt: 'Change lighting to different time of day - dawn, day, dusk, or night', 
-    model: 'nano-banana' 
+    prompt: 'Change the lighting and time of day in this image to', 
+    model: 'nano-banana',
+    options: [
+      { id: 'dawn', label: '🌅 Dawn', promptModifier: 'early morning dawn with soft golden light' },
+      { id: 'day', label: '☀️ Day', promptModifier: 'bright midday with full sunlight' },
+      { id: 'dusk', label: '🌇 Dusk', promptModifier: 'evening dusk with warm orange and pink tones' },
+      { id: 'night', label: '🌙 Night', promptModifier: 'nighttime with dark sky and artificial lighting' },
+      { id: 'golden-hour', label: '✨ Golden Hour', promptModifier: 'golden hour with warm soft lighting' },
+    ]
   },
   { 
     id: 'season-change', 
     name: 'Season Change', 
     icon: 'leaf-outline', 
-    prompt: 'Transform scene to different season - spring, summer, fall, or winter', 
-    model: 'qwen' 
+    prompt: 'Transform the scene to', 
+    model: 'qwen',
+    options: [
+      { id: 'spring', label: '🌸 Spring', promptModifier: 'spring season with blooming flowers and fresh green leaves' },
+      { id: 'summer', label: '☀️ Summer', promptModifier: 'summer season with lush green foliage and bright sunlight' },
+      { id: 'fall', label: '🍂 Fall', promptModifier: 'fall season with colorful autumn leaves and warm tones' },
+      { id: 'winter', label: '❄️ Winter', promptModifier: 'winter season with snow, bare trees, and cold atmosphere' },
+    ]
   },
 ];
 
@@ -129,6 +198,8 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
   const [newEffectName, setNewEffectName] = useState('');
   const [newEffectPrompt, setNewEffectPrompt] = useState('');
   const [newEffectModel, setNewEffectModel] = useState<'qwen' | 'nano-banana'>('qwen');
+  const [showOptionsModal, setShowOptionsModal] = useState(false);
+  const [selectedEffect, setSelectedEffect] = useState<Effect | CustomEffect | null>(null);
   const backgroundColor = useThemeColor({}, 'background');
   const textColor = useThemeColor({}, 'text');
   const tintColor = useThemeColor({}, 'tint');
@@ -308,20 +379,43 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
     }
   };
 
-  const applyEffect = async (effect: Effect | CustomEffect) => {
+  const applyEffect = async (effect: Effect | CustomEffect, option?: EffectOption) => {
     console.log('✨ Applying effect:', effect.name);
     if (!currentImage) {
       Alert.alert('No Image', 'Please select an image first');
       return;
     }
 
+    // If effect has options but no option selected, show options modal
+    if (effect.options && effect.options.length > 0 && !option) {
+      setSelectedEffect(effect);
+      setShowOptionsModal(true);
+      return;
+    }
+
+    // Build the final prompt
+    let finalPrompt = effect.prompt;
+    if (option) {
+      finalPrompt = `${effect.prompt} ${option.promptModifier}`;
+    }
+
+    console.log('📝 Final prompt:', finalPrompt);
+
     // Map 'nano-banana' to 'nano' for the API
     const model = effect.model === 'nano-banana' ? 'nano' : effect.model;
     
     if (isMultiImageMode && selectedSourceImages.length > 1) {
-      await processMultiImageEdit(effect.prompt, model as 'qwen' | 'nano');
+      await processMultiImageEdit(finalPrompt, model as 'qwen' | 'nano');
     } else {
-      await processImageEdit(effect.prompt, model as 'qwen' | 'nano');
+      await processImageEdit(finalPrompt, model as 'qwen' | 'nano');
+    }
+  };
+
+  const handleOptionSelected = (option: EffectOption) => {
+    if (selectedEffect) {
+      setShowOptionsModal(false);
+      applyEffect(selectedEffect, option);
+      setSelectedEffect(null);
     }
   };
 
@@ -1334,6 +1428,47 @@ export function PhotoPicker({ onImageSelected }: PhotoPickerProps) {
           </View>
         </View>
       </Modal>
+
+      {/* Effect Options Selection Modal */}
+      <Modal
+        visible={showOptionsModal}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowOptionsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { backgroundColor }]}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: textColor }]}>
+                {selectedEffect?.name}
+              </Text>
+              <TouchableOpacity onPress={() => setShowOptionsModal(false)}>
+                <Ionicons name="close" size={28} color={textColor} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalBody}>
+              <Text style={[styles.optionsSubtitle, { color: textColor }]}>
+                Select an option:
+              </Text>
+              
+              {selectedEffect?.options?.map((option) => (
+                <TouchableOpacity
+                  key={option.id}
+                  style={[styles.optionButton, { borderColor: textColor + '20' }]}
+                  onPress={() => handleOptionSelected(option)}
+                  disabled={isEditing || isGeneratingVideo || isSaving}
+                >
+                  <Text style={[styles.optionButtonText, { color: textColor }]}>
+                    {option.label}
+                  </Text>
+                  <Ionicons name="chevron-forward" size={20} color={textColor} style={{ opacity: 0.5 }} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1714,5 +1849,26 @@ const styles = StyleSheet.create({
   modalButtonText: {
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Options Modal Styles
+  optionsSubtitle: {
+    fontSize: 16,
+    marginBottom: 16,
+    opacity: 0.7,
+  },
+  optionButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderRadius: 10,
+    marginBottom: 12,
+    backgroundColor: 'rgba(128, 128, 128, 0.05)',
+  },
+  optionButtonText: {
+    fontSize: 18,
+    fontWeight: '500',
   },
 });
